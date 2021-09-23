@@ -1,0 +1,72 @@
+Use the RODI benchmark
+
+Supervision:
+SQL query tells us what we want to obtain when we run the sparql query
+
+x rdf:type C:
+  Q.id gives you all x
+
+  Q1.id gives you all x, but other relations are in Q2
+  Q1 natural join Q2
+
+x y z:
+  x and z should have corresponding rdf:type edges and they come from
+  the id column of the corresponding tables
+  call them table(x) and table(z)
+
+  if y is a functional property, then it should correspond to a column col
+  in table(x), i.e., (x,z) pairs are
+  (table(x).id, table(x).col)
+
+  if y is an inverse functional property, then it should correspond to a column col
+  in table(z), i.e., (x,z) pairs are
+  (table(z).col, table(z).id)
+
+  if y is not a functional property, then look for a table
+  corresponding to y and identify the column corresponding to z
+
+  if y is not a functional property, then look for a table
+  corresponding to z and identify the inverse column corresponding to
+  x
+
+
+  create an fixed embedding vector for each sql table
+  create a trainable embedding vector for each owl:Class
+  these have to be matched during training
+
+  create a fixed embedding vector for each column name in each sql
+  table
+  create a trainable embedding vector for each
+  owl:FunctionalProperty
+  these have to be matched
+  TODO: assume that the same column name is not used in different
+  tables to mean different things
+
+  same as above for owl:InverseFunctionalProperty
+
+
+  for each functional property
+  create a fixed embedding vector for each column of each table
+
+  for each functional property, create an embedding vector
+
+  create a trainable embedding vector  for
+
+
+Bind each class C_i to a table T_i
+Bind each functional property to
+     - column in class table of subject T_s.p
+Bind each inverse functional property to
+     - column in class table of object T_o.p
+Bind each plain property to a table T_prop_i
+
+SELECT count(*)
+FROM T_i, T_prop_j
+WHERE T_i.id = T_prop_j.xxx
+
+
+generate problems automatically (sparql, sql, triples, selects)
+try brute force mapping search
+
+automatically compare sql and transformed sql results
+

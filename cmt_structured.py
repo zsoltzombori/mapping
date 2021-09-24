@@ -6,8 +6,8 @@ import query
 import util
 
 schema = "cmt_structured"
-ontology = "/users/zsoori/mapping/RODI/data/cmt_structured/ontology.ttl"
-query_dir = "/users/zsoori/mapping/RODI/data/cmt_structured/queries"
+ontology = "RODI/data/cmt_structured/ontology.ttl"
+query_dir = "RODI/data/cmt_structured/queries"
 
 mappings = {
     ":Conference": "conferences",
@@ -53,14 +53,5 @@ mappings = {
     ":hasProgramCommitteeMember.to": "program_committee_member",
 }
 
-problem = mappingProblem.MappingProblem(schema, ontology, mappings)
-
-for filename in os.listdir(query_dir):
-    if filename.endswith(".qpair"):
-        fullname = os.path.join(query_dir, filename)
-        print(fullname)
-        q = query.Query(fullname)
-        problem.queries.append(q)
-problem.update_namespaces()
-problem.queries.sort(key=lambda x: x.filename)
-
+problem = mappingProblem.MappingProblem(schema, ontology, mappings, use_db=False)
+problem.add_query_dir(query_dir)

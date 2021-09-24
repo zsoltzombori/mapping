@@ -3,22 +3,9 @@ import psycopg2
 
 import util
 
-cursor = util.init_db()
-util.inspect_database(cursor)
+from cmt_renamed import problem
+# from cmt_structured import problem
 
-# from cmt_renamed import problem
-from cmt_structured import problem
-util.inspect_schema(cursor, problem.schema)
-cursor.execute("SET search_path TO {}, public;".format(problem.schema))
-
-tables = util.table_names(cursor, problem.schema)
-print(tables)
-
-classes = problem.get_classes()
-print(classes)
-
-properties = problem.get_properties()
-print(properties)
 
 for query in problem.queries:
     print("\n**********************")
@@ -29,20 +16,21 @@ for query in problem.queries:
     #     print(f"{row}")
     
     print("\nsql query: ", query.sql_query)
-    cursor.execute(query.sql_query)
-    result = cursor.fetchall()
+    # cursor.execute(query.sql_query)
+    # result = cursor.fetchall()
 
-    sql2 = problem.transform2sql(query)
+    sql2 = problem.sparql2sql(query)
+    # sql2 = problem.transform2sql(query)
     print("\n transformed query: ", sql2)
-    cursor.execute(sql2)
-    result2 = cursor.fetchall()
+    # cursor.execute(sql2)
+    # result2 = cursor.fetchall()
 
-    if result == result2:
-        print("!!!!PASSED!!!!")
-    else:
-        util.print_result(result)
-        util.print_result(result2)
-        assert False
+    # if result == result2:
+    #     print("!!!!PASSED!!!!")
+    # else:
+    #     util.print_result(result)
+    #     util.print_result(result2)
+    #     assert False
         
         
         

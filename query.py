@@ -71,7 +71,6 @@ def recover_selects(selectstring):
     return selects
 
 def triples_to_logic(triples):
-    print(triples)
     logic = []
     reformulated = []
     identities = []
@@ -79,8 +78,7 @@ def triples_to_logic(triples):
         if t[1] == "rdf:type":
             logic.append([t[2],t[0]])
             h = hash(t[2])
-            reformulated.
+            # reformulated.
         else:
             logic.append([t[1],t[0], t[2]])
-    print("logic: ", logic)
-    return
+    return logic

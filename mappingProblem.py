@@ -1,23 +1,51 @@
 import rdflib
+import psycopg2
+import os
 
 import util
+import query
 
 class MappingProblem:
-    def __init__(self, schema, ontology, mappings):
+    def __init__(self, schema, ontology, mappings, use_db=True):
         self.schema = schema
         self.ontology = ontology
         self.mappings = mappings
         self.graph = rdflib.Graph()
         self.graph.parse(ontology)
         self.queries = []
+        self.use_db = use_db
 
         self.namespaces = namespaces = {
             'owl': rdflib.Namespace("http://www.w3.org/2002/07/owl#"),
             'rdfs': rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#"),
         }
 
-        
+        if self.use_db:
+            self.cursor = util.init_db()
+            util.inspect_database(self.cursor)
+            util.inspect_schema(self.cursor, self.schema)
+            self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
 
+            self.db_tables = util.table_names(self.cursor, self.schema)
+            print(self.db_tables)
+        else:
+            self.cursor = None
+
+        self.classes = self.get_classes()
+        print(self.classes)
+        self.properties = self.get_properties()
+        print(self.properties)
+
+
+    def add_query_dir(self, query_dir):
+        for filename in os.listdir(query_dir):
+            if filename.endswith(".qpair"):
+                fullname = os.path.join(query_dir, filename)
+                # print(fullname)
+                q = query.Query(fullname)
+                self.queries.append(q)
+        self.update_namespaces()
+        self.queries.sort(key=lambda x: x.filename)
 
     def update_namespaces(self):
         for q in self.queries:
@@ -68,6 +96,41 @@ class MappingProblem:
             if isinstance(row.c, rdflib.term.URIRef):
                 domains.append(row.c.n3())
         return domains
+
+    def sparql2sql(self, query):
+        froms= [] # sql tables used to be joined
+        objects = util.DictOfList() # keep track of where variables are to be found
+        
+        for t in query.logic:
+            if t[0] in self.mappings:
+                m = self.mappings[t[0]]
+            else:
+                print("Missing mapping for class/predicate: ", t[0])
+                m = ("dummyT_"+t[0], "dummyA1_"+t[0], "dummyA2_"+t[0])
+            froms.append(m[0])
+
+            objects.add(t[1], (m[0], m[1]))
+            if len(t) == 3:
+                objects.add(t[2], (m[0], m[2]))
+
+        selects = ["{}.{}".format(table, attribute) for (table, attribute) in objects.values()]
+        wheres = []
+        for k in objects.keys():
+            columns = objects.get(k)
+            for i in range(len(columns)):
+                t1, a1 = columns[i]
+                for j in range(i+1, len(columns)):
+                    t2, a2 = columns[j]
+                    if (t1 != t2 or a1 != a2):
+                        wheres.append("{}.{}={}.{}".format(t1,a1,t2,a2))
+
+        froms = list(set(froms))
+        selects = list(set(selects))
+        wheres = list(set(wheres))
+        sql = "SELECT " + ", ".join(selects) + " FROM " + ", ".join(froms)
+        if len(wheres) > 0:
+            sql += " WHERE " + " AND ".join(wheres)
+        return sql
 
     def transform2sql(self, query):
         
@@ -139,3 +202,6 @@ class MappingProblem:
         if len(wheres) > 0:
             sql_query += " WHERE " + " AND ".join(wheres)
         return sql_query
+
+
+    

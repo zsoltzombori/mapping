@@ -63,3 +63,26 @@ def sparql_result_to_list(qres, colname):
         if isinstance(row[colname], rdflib.term.URIRef): # TODO UNDERSTAND WHAT TO DO WITH BNode-s (blank nodes)
             result.append(row[colname].n3())
     return result
+
+
+class DictOfList:
+    def __init__(self):
+        self.data = {}
+
+    def add(self, key, value):
+        if key in self.data:
+            self.data[key].append(value)
+        else:
+            self.data[key] = [value]
+
+    def keys(self):
+        return self.data.keys()
+
+    def get(self, key):
+        return self.data[key]
+
+    def values(self):
+        v = []
+        for k in self.data:
+            v += self.data[k]
+        return v

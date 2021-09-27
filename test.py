@@ -16,22 +16,21 @@ for query in problem.queries:
     #     print(f"{row}")
     
     print("\nsql query: ", query.sql_query)
-    # cursor.execute(query.sql_query)
-    # result = cursor.fetchall()
+    problem.cursor.execute(query.sql_query)
+    result = problem.cursor.fetchall()
 
-    problem.sparql2sqlcandidates(query)
     sql2 = problem.sparql2sql(query)
-    # sql2 = problem.transform2sql(query)
-    # print("\n transformed query: ", sql2)
-    # cursor.execute(sql2)
-    # result2 = cursor.fetchall()
+    print("\n transformed query: ", sql2)
+    problem.cursor.execute(sql2)
+    result2 = problem.cursor.fetchall()
 
-    # if result == result2:
-    #     print("!!!!PASSED!!!!")
-    # else:
-    #     util.print_result(result)
-    #     util.print_result(result2)
-    #     assert False
+    if result == result2:
+        print("!!!!PASSED!!!!") 
+    else:
+        print("!!!!FAILED!!!!")
+        util.print_result(result)
+        util.print_result(result2)
+        # assert False
         
         
         

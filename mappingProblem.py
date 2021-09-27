@@ -26,8 +26,8 @@ class MappingProblem:
             util.inspect_schema(self.cursor, self.schema)
             self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
 
-            self.db_tables = util.table_names(self.cursor, self.schema)
-            print(self.db_tables)
+            self.db_attributes = util.attributes(self.cursor, self.schema)
+            self.db_tables = self.db_attributes.keys()
         else:
             self.cursor = None
             self. db_tables = [
@@ -151,12 +151,26 @@ class MappingProblem:
         return 0
 
     def domain_of_property(self, property):
-        s = "SELECT ?c WHERE {" + property + " rdf:type owl:ObjectProperty; rdfs:domain ?c}"
-        qres = self.graph.query(s, initNs = self.namespaces)
+        s1 = "SELECT ?c WHERE {" + property + " rdf:type owl:ObjectProperty; rdfs:domain ?c}"
+        qres1 = self.graph.query(s1, initNs = self.namespaces)
+        s2 = "SELECT ?c WHERE {" + property + " rdf:type owl:DatatypeProperty; rdfs:domain ?c}"
+        qres2 = self.graph.query(s2, initNs = self.namespaces)
         domains = []
-        for row in qres:
+        rows = list(qres1) + list(qres2)
+        for row in rows:
             if isinstance(row.c, rdflib.term.URIRef):
                 domains.append(row.c.n3())
+            # else:
+            #     bnodes = list(row)
+            #     i = 0
+            #     while i< len(bnodes):
+            #         bnode = bnodes[i]
+            #         all_edges = list(self.graph[bnode])
+            #         union_edges = list(self.graph[bnode:rdflib.term.URIRef('http://www.w3.org/2002/07/owl#unionOf')])
+            #         print("all: ", all_edges)
+            #         print("union: ", union_edges)
+            #         bnodes += union_edges
+            #         i += 1
         return domains
 
     def range_of_property(self, property):
@@ -168,76 +182,98 @@ class MappingProblem:
                 ranges.append(row.c.n3())
         return ranges
 
-    def sparql2sqlcandidates(self, query):        
-        for t in query.logic:
+    def get_candidates(self, t, classes):
             candidates = []
 
             if len(t) == 2: # this is a class membership triple
                 tables = util.top_candidates(t[0], self.db_tables)
                 for T in tables:
-                    attributes = util.top_candidates("id", self.db_attributes[T])
+                    attributes = util.top_candidates("id", self.db_attributes.get(T))
                     for A in attributes:
                         candidates.append((T, A))
-                        
-            else: # other property triple                
-                domains = self.domain_of_property(t[0])
-                domains = [self.remove_uri(d) for d in domains]
-                ranges = self.range_of_property(t[0])
-                ranges = [self.remove_uri(r) for r in ranges]
-                
-                # case 1: relation lives in the domain table
-                for d in domains:
-                    tables = util.top_candidates(d, self.db_tables)
-                    for T in tables:
-                        attributes_from = util.top_candidates("id", self.db_attributes[T])
-                        attributes_to = util.top_candidates(t[0], self.db_attributes[T])
-                        for A_from in attributes_from:
-                            for A_to in attributes_to:
-                                candidates.append((T, A_from, A_to))
+                return candidates
 
-                # case 2: relation lives in the range table
-                for r in ranges:
-                    tables = util.top_candidates(r, self.db_tables)
+            if t[0] in ("rdfs:label", "rdfs:comment"):
+                predname = t[0].split(":")[1]
+                if t[1] in classes.keys():
+                    current_class = classes.get(t[1])
+                    tables = util.top_candidates(current_class, self.db_tables)
                     for T in tables:
-                        attributes_from = util.top_candidates(t[0], self.db_attributes[T])
-                        attributes_to = util.top_candidates("id", self.db_attributes[T])
-                        for A_from in attributes_from:
-                            for A_to in attributes_to:
-                                candidates.append((T, A_from, A_to))
-                
-                # case 3: relation has a separate table
-                tables = util.top_candidates(t[0], self.db_tables)
+                        attributes = util.top_candidates("predname", self.db_attributes.get(T))
+                        for A in attributes:
+                            candidates.append((T, A))
+                return candidates
+            
+
+            # other property triple                
+            domains = self.domain_of_property(t[0])
+            domains = [self.remove_uri(d) for d in domains]
+            ranges = self.range_of_property(t[0])
+            ranges = [self.remove_uri(r) for r in ranges]
+            
+            # case 1: relation lives in the domain table
+            for d in domains:
+                tables = util.top_candidates(d, self.db_tables)
                 for T in tables:
-                    attributes_from = []
-                    attributes_to = []
-                    for d in domains:
-                        attributes_from += util.top_candidates(d, self.db_attributes[T])
-                    for r in ranges:
-                        attributes_to += util.top_candidates(r, self.db_attributes[T])
+                    attributes_from = util.top_candidates("id", self.db_attributes.get(T))
+                    attributes_to = util.top_candidates(t[0], self.db_attributes.get(T))
                     for A_from in attributes_from:
                         for A_to in attributes_to:
                             candidates.append((T, A_from, A_to))
+                            
+            # case 2: relation lives in the range table
+            for r in ranges:
+                tables = util.top_candidates(r, self.db_tables)
+                for T in tables:
+                    attributes_from = util.top_candidates(t[0], self.db_attributes.get(T))
+                    attributes_to = util.top_candidates("id", self.db_attributes.get(T))
+                    for A_from in attributes_from:
+                        for A_to in attributes_to:
+                            candidates.append((T, A_from, A_to))
+                
+            # case 3: relation has a separate table
+            tables = util.top_candidates(t[0], self.db_tables)
+            for T in tables:
+                attributes_from = []
+                attributes_to = []
+                for d in domains:
+                    attributes_from += util.top_candidates(d, self.db_attributes.get(T))
+                for r in ranges:
+                    attributes_to += util.top_candidates(r, self.db_attributes.get(T))
+                for A_from in attributes_from:
+                    for A_to in attributes_to:
+                        candidates.append((T, A_from, A_to))
 
-            print(t)
-            for c in candidates:
-                print("   ", c)
-                    
+
+            return candidates
             
         
 
     def sparql2sql(self, query):
+
+        # collect all class memberships:
+        classes = util.DictOfList()
+        for t in query.logic:
+            if len(t) == 2:
+                classes.add(t[1], t[0])
+
         froms= [] # sql tables used to be joined
         objects = util.DictOfList() # keep track of where variables are to be found
-        
+                
         for t in query.logic:
-            
-            if t[0] in self.mappings:
-                m = self.mappings[t[0]]
-            else:
-                print("Missing mapping for class/predicate: ", t[0])
-                m = ("dummyT_"+t[0], "dummyA1_"+t[0], "dummyA2_"+t[0])
-            froms.append(m[0])
+            candidates = self.get_candidates(t, classes)
+            print("Triple: ", t)
+            for c in candidates:
+                print("    ", c)
 
+            # if t[0] in self.mappings:
+            #     m = self.mappings[t[0]]
+            # else:
+            #     print("Missing mapping for class/predicate: ", t[0])
+            #     m = ("dummyT_"+t[0], "dummyA1_"+t[0], "dummyA2_"+t[0])
+
+            m = candidates[0] # TODO more candidates
+            froms.append(m[0])
             objects.add(t[1], (m[0], m[1]))
             if len(t) == 3:
                 objects.add(t[2], (m[0], m[2]))
@@ -253,10 +289,15 @@ class MappingProblem:
                     if (t1 != t2 or a1 != a2):
                         wheres.append("{}.{}={}.{}".format(t1,a1,t2,a2))
 
-        froms = list(set(froms))
         selects = list(set(selects))
+        froms = list(set(froms))
         wheres = list(set(wheres))
-        sql = "SELECT " + ", ".join(selects) + " FROM " + ", ".join(froms)
+
+        if query.selects is None:
+            sql = "SELECT COUNT(*)"
+        else:
+            sql = "SELECT " + ", ".join(selects)
+        sql += " FROM " + ", ".join(froms)
         if len(wheres) > 0:
             sql += " WHERE " + " AND ".join(wheres)
         return sql

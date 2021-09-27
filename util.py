@@ -45,6 +45,15 @@ def table_names(cursor, schema):
     result = cursor.fetchall()
     return [r[0] for r in result]
 
+def attributes(cursor, schema):
+    s = "select table_name, column_name from information_schema.columns where table_schema='{}'".format(schema)
+    cursor.execute(s)
+    result = cursor.fetchall()
+    attributes = DictOfList()
+    for r in result:
+        attributes.add(r[0], r[1])
+    return attributes
+
 def inspect_database(cursor):
     s = "SELECT * FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema';"
     cursor.execute(s)
@@ -77,7 +86,7 @@ class DictOfList:
             self.data[key] = [value]
 
     def keys(self):
-        return self.data.keys()
+        return list(self.data.keys())
 
     def get(self, key):
         return self.data[key]

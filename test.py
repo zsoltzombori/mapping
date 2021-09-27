@@ -19,9 +19,10 @@ for query in problem.queries:
     # cursor.execute(query.sql_query)
     # result = cursor.fetchall()
 
+    problem.sparql2sqlcandidates(query)
     sql2 = problem.sparql2sql(query)
     # sql2 = problem.transform2sql(query)
-    print("\n transformed query: ", sql2)
+    # print("\n transformed query: ", sql2)
     # cursor.execute(sql2)
     # result2 = cursor.fetchall()
 

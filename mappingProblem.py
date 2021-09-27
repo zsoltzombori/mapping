@@ -30,6 +30,43 @@ class MappingProblem:
             print(self.db_tables)
         else:
             self.cursor = None
+            self. db_tables = [
+                "persons",
+                "conferences",
+                "reviews",
+                "reviewers",
+                "conference_members",
+                "authors",
+                "co_authors",
+                "documents",
+                "paper_full_versions",
+                "paper_abstracts",
+                "program_committees",
+                "pc_members",
+                "program_committee_chairs",
+                "co_author_paper",
+                "paper_reviewer",
+                "program_committee_member"
+            ]
+            self.db_attributes={
+                "persons": ["id", "name", "email"],
+                "conferences": ["id", "site_url", "accepts_hardcopy_submissions", "logo_url", "date", "name", "reviews_per_paper"],
+                "reviews": ["id"],
+                "reviewers": ["id"],
+                "conference_members": ["id"],
+                "authors": ["id"],
+                "co_authors": ["id"],
+                "documents": ["id"],
+                "paper_full_versions": ["id"],
+                "paper_abstracts": ["id"],
+                "program_committees": ["id"],
+                "pc_members": ["id"],
+                "program_committee_chairs": ["id"],
+                "co_author_paper": ["id"],
+                "paper_reviewer": ["id"],
+                "program_committee_member": ["id"],
+            }
+
 
         self.classes = self.get_classes()
         print(self.classes)
@@ -51,6 +88,31 @@ class MappingProblem:
         for q in self.queries:
             for key in q.namespaces:
                 self.namespaces[key] = q.namespaces[key]
+
+    def expand_uri(self, uri):
+        uri_parts = uri.split(":")
+        if len(uri_parts) == 1:
+            return uri
+        elif (len(uri_parts) == 2):
+            if uri_parts[0] in self.namespaces:
+                return "<"+self.namespaces[uri_parts[0]] + uri_parts[1] + ">"
+            else:
+                assert False, uri
+
+        else:
+            assert False, uri
+
+    def remove_uri(self, uri):
+        if uri[0] != "<" or uri[-1] != ">":
+            return uri
+
+        uri2 = uri[1:-1]
+        for ns in self.namespaces:
+            value = self.namespaces[ns]
+            if uri2.find(value) == 0:
+                return ns + ":" + uri2[len(value):]
+        return uri
+
 
     def get_classes(self):
         s = "SELECT ?c WHERE {?c rdf:type owl:Class}"
@@ -88,8 +150,8 @@ class MappingProblem:
 
         return 0
 
-    def domain_of_functional_property(self, property):
-        s = "SELECT ?c WHERE {" + property + " rdf:type owl:FunctionalProperty; rdfs:domain ?c}"
+    def domain_of_property(self, property):
+        s = "SELECT ?c WHERE {" + property + " rdf:type owl:ObjectProperty; rdfs:domain ?c}"
         qres = self.graph.query(s, initNs = self.namespaces)
         domains = []
         for row in qres:
@@ -97,11 +159,78 @@ class MappingProblem:
                 domains.append(row.c.n3())
         return domains
 
+    def range_of_property(self, property):
+        s = "SELECT ?c WHERE {" + property + " rdf:type owl:ObjectProperty; rdfs:range ?c}"
+        qres = self.graph.query(s, initNs = self.namespaces)
+        ranges = []
+        for row in qres:
+            if isinstance(row.c, rdflib.term.URIRef):
+                ranges.append(row.c.n3())
+        return ranges
+
+    def sparql2sqlcandidates(self, query):        
+        for t in query.logic:
+            candidates = []
+
+            if len(t) == 2: # this is a class membership triple
+                tables = util.top_candidates(t[0], self.db_tables)
+                for T in tables:
+                    attributes = util.top_candidates("id", self.db_attributes[T])
+                    for A in attributes:
+                        candidates.append((T, A))
+                        
+            else: # other property triple                
+                domains = self.domain_of_property(t[0])
+                domains = [self.remove_uri(d) for d in domains]
+                ranges = self.range_of_property(t[0])
+                ranges = [self.remove_uri(r) for r in ranges]
+                
+                # case 1: relation lives in the domain table
+                for d in domains:
+                    tables = util.top_candidates(d, self.db_tables)
+                    for T in tables:
+                        attributes_from = util.top_candidates("id", self.db_attributes[T])
+                        attributes_to = util.top_candidates(t[0], self.db_attributes[T])
+                        for A_from in attributes_from:
+                            for A_to in attributes_to:
+                                candidates.append((T, A_from, A_to))
+
+                # case 2: relation lives in the range table
+                for r in ranges:
+                    tables = util.top_candidates(r, self.db_tables)
+                    for T in tables:
+                        attributes_from = util.top_candidates(t[0], self.db_attributes[T])
+                        attributes_to = util.top_candidates("id", self.db_attributes[T])
+                        for A_from in attributes_from:
+                            for A_to in attributes_to:
+                                candidates.append((T, A_from, A_to))
+                
+                # case 3: relation has a separate table
+                tables = util.top_candidates(t[0], self.db_tables)
+                for T in tables:
+                    attributes_from = []
+                    attributes_to = []
+                    for d in domains:
+                        attributes_from += util.top_candidates(d, self.db_attributes[T])
+                    for r in ranges:
+                        attributes_to += util.top_candidates(r, self.db_attributes[T])
+                    for A_from in attributes_from:
+                        for A_to in attributes_to:
+                            candidates.append((T, A_from, A_to))
+
+            print(t)
+            for c in candidates:
+                print("   ", c)
+                    
+            
+        
+
     def sparql2sql(self, query):
         froms= [] # sql tables used to be joined
         objects = util.DictOfList() # keep track of where variables are to be found
         
         for t in query.logic:
+            
             if t[0] in self.mappings:
                 m = self.mappings[t[0]]
             else:

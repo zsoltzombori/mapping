@@ -1,6 +1,7 @@
 from configparser import ConfigParser
 import psycopg2
 import rdflib
+from nltk.translate.bleu_score import sentence_bleu
 
 # parse db configurations from file
 def config(filename='database.ini', section='postgresql'):
@@ -86,3 +87,32 @@ class DictOfList:
         for k in self.data:
             v += self.data[k]
         return v
+
+# TODO explore other alternatives than character level bleu score
+def compare_strings(reference, candidate):
+    reference = list(reference)
+    candidate = list(candidate)
+    return sentence_bleu([reference], candidate)
+    
+
+def top_candidates(reference, candidates, threshold=0.01):
+    reference0 = list(reference)
+    candidates0 = [list(c) for c in candidates]
+    if len(reference0) < 4:
+        weights = [1/len(reference0) for _ in range(len(reference0))]
+    else:
+        weights = [0.25, 0.25, 0.25, 0.25]
+    sim_scores = [sentence_bleu([reference], c, weights=weights) for c in candidates0]
+    sim_scores2 = [ (sim_scores[i],i) for i in range(len(sim_scores)) ]
+    sim_scores2.sort(reverse=True)
+    sorted_scores, perm = zip(*sim_scores2)
+    sorted_candidates = [candidates[p] for p in perm]
+    result = []
+    last_score = 1.0
+    for score, candidate in zip(sorted_scores, sorted_candidates):
+        if score < last_score * threshold:
+            return result
+        else:
+            result.append(candidate)
+            last_score = score
+    return result

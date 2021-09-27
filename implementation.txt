@@ -70,3 +70,26 @@ try brute force mapping search
 
 automatically compare sql and transformed sql results
 
+
+One query from npd
+atomic-ZValueTo.qpair
+sparql=SELECT ?x ?y { ?x <http://sws.ifi.uio.no/vocab/npd-v2#ZValueTo> ?y }
+
+Solution is the union of two tables (tables and subject columns are specified in comments in the ontology)
+
+Object is harder as it is split in multiple columns
+
+'http://sws.ifi.uio.no/data/npd-v2/licence/' + TABLE1.prlNpdidLicence +
+'/area/' + TABLE1.prlArea_id +
+'/history/', TABLE1.prlAreaPolyDateValidFrom +
+'/', TABLE1.prlAreaPolyDateValidTo
+
+union
+
+'http://sws.ifi.uio.no/data/npd-v2/licence/' + TABLE1.prlNpdidLicence +
+'/block/' + TABLE1.blcName +
+'/polyno/' + TABLE1.prlAreaPolyPolyNo +
+'/history/' + TABLE1.prlAreaPolyDateValidFrom +
+'/' + TABLE1.prlAreaPolyDateValidTo
+
+

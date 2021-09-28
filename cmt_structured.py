@@ -53,5 +53,5 @@ mappings = {
     ":hasProgramCommitteeMember.to": "program_committee_member",
 }
 
-problem = mappingProblem.MappingProblem(schema, ontology, mappings, use_db=False)
+problem = mappingProblem.MappingProblem(schema, ontology, mappings, use_db=True)
 problem.add_query_dir(query_dir)

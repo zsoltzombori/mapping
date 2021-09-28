@@ -2,6 +2,8 @@ from configparser import ConfigParser
 import psycopg2
 import rdflib
 from nltk.translate.bleu_score import sentence_bleu
+import numpy as np
+import pandas as pd
 
 # parse db configurations from file
 def config(filename='database.ini', section='postgresql'):
@@ -105,8 +107,9 @@ def compare_strings(reference, candidate):
     
 
 def top_candidates(reference, candidates, threshold=0.01):
-    reference0 = list(reference)
-    candidates0 = [list(c) for c in candidates]
+    
+    reference0 = list(reference.lower())
+    candidates0 = [list(c.lower()) for c in candidates]
     if len(reference0) < 4:
         weights = [1/len(reference0) for _ in range(len(reference0))]
     else:
@@ -116,12 +119,32 @@ def top_candidates(reference, candidates, threshold=0.01):
     sim_scores2.sort(reverse=True)
     sorted_scores, perm = zip(*sim_scores2)
     sorted_candidates = [candidates[p] for p in perm]
-    result = []
+    best = []
+    best_scores = []
+    
     last_score = 1.0
     for score, candidate in zip(sorted_scores, sorted_candidates):
         if score < last_score * threshold:
-            return result
+            return best, best_scores
         else:
-            result.append(candidate)
+            best.append(candidate)
+            best_scores.append(score)
             last_score = score
-    return result
+    return best, best_scores
+
+# TODO alternatives
+def compose_scores_and(scores):
+    return np.prod(scores)
+
+
+    
+def groupby_max(rows, max_index):
+    if len(rows) == 0:
+        return rows
+    cols = len(rows[0])
+    groupby_indices = list(range(cols))
+    groupby_indices.remove(max_index)
+    df = pd.DataFrame(rows).groupby(groupby_indices).max().reset_index()
+    df = df[range(cols)]
+    return df.values.tolist()
+    

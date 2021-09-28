@@ -182,68 +182,139 @@ class MappingProblem:
                 ranges.append(row.c.n3())
         return ranges
 
+    def get_candidates_aux(self, target_tables, target_att_froms, target_att_tos):
+        candidates = []
+        for target_table in target_tables:
+            tables, table_scores = util.top_candidates(target_table, self.db_tables)
+            for T, Tscore in zip(tables, table_scores):
+                for target_att_from in target_att_froms:
+                    attributes_from, attribute_scores_from = util.top_candidates(target_att_from, self.db_attributes.get(T))
+                    for A_from, Ascore_from in zip(attributes_from, attribute_scores_from):
+                        for target_att_to in target_att_tos:
+                            attributes_to, attribute_scores_to = util.top_candidates(target_att_to, self.db_attributes.get(T))
+                            for A_to, Ascore_to in zip(attributes_to, attribute_scores_to):
+                                score = util.compose_scores_and([Tscore, Ascore_from, Ascore_to])
+                                candidates.append((score, T, A_from, A_to))
+                        if len(target_att_tos) == 0:
+                            score = util.compose_scores_and([Tscore, Ascore_from])
+                            candidates.append((score, T, A_from))
+        return candidates
+
     def get_candidates(self, t, classes):
             candidates = []
 
             if len(t) == 2: # this is a class membership triple
-                tables = util.top_candidates(t[0], self.db_tables)
-                for T in tables:
-                    attributes = util.top_candidates("id", self.db_attributes.get(T))
-                    for A in attributes:
-                        candidates.append((T, A))
-                return candidates
-
-            if t[0] in ("rdfs:label", "rdfs:comment"):
-                predname = t[0].split(":")[1]
-                if t[1] in classes.keys():
-                    current_class = classes.get(t[1])
-                    tables = util.top_candidates(current_class, self.db_tables)
-                    for T in tables:
-                        attributes = util.top_candidates("predname", self.db_attributes.get(T))
-                        for A in attributes:
-                            candidates.append((T, A))
-                return candidates
+                target_tables = [t[0]]
+                target_atts_from = ["id"]
+                target_atts_to = []
+                return self.get_candidates_aux(target_tables, target_atts_from, target_atts_to)
             
+                # tables, table_scores = util.top_candidates(t[0], self.db_tables)
+                # for T, Tscore in zip(tables, table_scores):
+                #     attributes, attribute_scores = util.top_candidates("id", self.db_attributes.get(T))
+                #     for A, Ascore in zip(attributes, attribute_scores):
+                #         score = util.compose_scores_and([Tscore, Ascore])
+                #         candidates.append((score, T, A))
+                # return candidates            
 
-            # other property triple                
+            # other property triple
+            
             domains = self.domain_of_property(t[0])
             domains = [self.remove_uri(d) for d in domains]
+            if t[1] in classes.keys():
+                domains += classes.get(t[1])
+            domains = list(set(domains))
             ranges = self.range_of_property(t[0])
             ranges = [self.remove_uri(r) for r in ranges]
-            
+            if t[2] in classes.keys():
+                ranges += classes.get(t[1])
+            ranges = list(set(ranges))
+                           
             # case 1: relation lives in the domain table
-            for d in domains:
-                tables = util.top_candidates(d, self.db_tables)
-                for T in tables:
-                    attributes_from = util.top_candidates("id", self.db_attributes.get(T))
-                    attributes_to = util.top_candidates(t[0], self.db_attributes.get(T))
-                    for A_from in attributes_from:
-                        for A_to in attributes_to:
-                            candidates.append((T, A_from, A_to))
+            #         or in the table where the subject lives
+            target_tables = domains
+            target_atts_from = ["id"]
+            target_atts_to = [t[0]]
+            candidates += self.get_candidates_aux(target_tables, target_atts_from, target_atts_to)
+            
+            # for d in domains:
+            #     tables, table_scores = util.top_candidates(d, self.db_tables)
+            #     for T, Tscore in zip(tables, table_scores):
+            #         attributes_from, attribute_scores_from = util.top_candidates("id", self.db_attributes.get(T))
+            #         attributes_to, attribute_scores_to = util.top_candidates(t[0], self.db_attributes.get(T))
+            #         for A_from, Ascore_from in zip(attributes_from, attribute_scores_from):
+            #             for A_to, Ascore_to in zip(attributes_to, attribute_scores_to):
+            #                 score = util.compose_scores_and([Tscore, Ascore_from, Ascore_to])
+            #                 candidates.append((score, T, A_from, A_to))
                             
             # case 2: relation lives in the range table
-            for r in ranges:
-                tables = util.top_candidates(r, self.db_tables)
-                for T in tables:
-                    attributes_from = util.top_candidates(t[0], self.db_attributes.get(T))
-                    attributes_to = util.top_candidates("id", self.db_attributes.get(T))
-                    for A_from in attributes_from:
-                        for A_to in attributes_to:
-                            candidates.append((T, A_from, A_to))
+            #         or in the table where the subject lives
+            target_tables = ranges
+            target_atts_from = [t[0]]
+            target_atts_to = ["id"]
+            candidates += self.get_candidates_aux(target_tables, target_atts_from, target_atts_to)
+
+            # for r in ranges:
+            #     tables, table_scores = util.top_candidates(r, self.db_tables)
+            #     for T, Tscore in zip(tables, table_scores):
+            #         attributes_from, attribute_scores_from = util.top_candidates(t[0], self.db_attributes.get(T))
+            #         attributes_to, attribute_scores_to = util.top_candidates("id", self.db_attributes.get(T))
+            #         for A_from, Ascore_from in zip(attributes_from, attribute_scores_from):
+            #             for A_to, Ascore_to in zip(attributes_to, attribute_scores_to):
+            #                 score = util.compose_scores_and([Tscore, Ascore_from, Ascore_to])
+            #                 candidates.append((score, T, A_from, A_to))
                 
             # case 3: relation has a separate table
-            tables = util.top_candidates(t[0], self.db_tables)
-            for T in tables:
-                attributes_from = []
-                attributes_to = []
-                for d in domains:
-                    attributes_from += util.top_candidates(d, self.db_attributes.get(T))
-                for r in ranges:
-                    attributes_to += util.top_candidates(r, self.db_attributes.get(T))
-                for A_from in attributes_from:
-                    for A_to in attributes_to:
-                        candidates.append((T, A_from, A_to))
+            target_tables = [t[0]]
+            target_atts_from = domains
+            target_atts_to = ranges
+            candidates += self.get_candidates_aux(target_tables, target_atts_from, target_atts_to)
 
+            # tables, table_scores = util.top_candidates(t[0], self.db_tables)
+            # for T, Tscore in zip(tables, table_scores):
+            #     attributes_from = []
+            #     attributes_to = []
+            #     attribute_scores_from = []
+            #     attribute_scores_to = []
+            #     for d in domains:
+            #         atts, scores = util.top_candidates(d, self.db_attributes.get(T))
+            #         attributes_from += atts
+            #         attribute_scores_from += scores
+            #     for r in ranges:
+            #         atts, scores = util.top_candidates(r, self.db_attributes.get(T))
+            #         attributes_to += atts
+            #         attribute_scores_to += scores
+            #     for A_from, Ascore_from in zip(attributes_from, attribute_scores_from):
+            #         for A_to, Ascore_to in zip(attributes_to, attribute_scores_to):
+            #             score = util.compose_scores_and([Tscore, Ascore_from, Ascore_to])
+            #             candidates.append((score, T, A_from, A_to))
+
+            # # case 4: relation lives in the table associated with the class of the subject
+            # if t[1] in classes.keys():
+            #     current_class = classes.get(t[1])
+            #     tables, table_scores = util.top_candidates(current_class, self.db_tables)
+            #     for T, Tscore in zip(tables, table_scores):
+            #         attributes_from, attribute_scores_from = util.top_candidates("id", self.db_attributes.get(T))
+            #         attributes_to, attribute_scores_to = util.top_candidates(t[0], self.db_attributes.get(T))
+            #         for A_from, Ascore_from in zip(attributes_from, attribute_scores_from):
+            #             for A_to, Ascore_to in zip(attributes_to, attribute_scores_to):
+            #                 score = util.compose_scores_and([Tscore, Ascore_from, Ascore_to])
+            #                 candidates.append((score, T, A_from, A_to))
+
+
+            #         attributes, attribute_scores = util.top_candidates(t[0], self.db_attributes.get(T))
+
+                    
+            #             for A, Ascore in zip(attributes, attribute_scores):
+            #                 score = util.compose_scores_and([Tscore, Ascore])
+            #                 candidates.append((score, T, A))
+            #     return candidates
+                
+            # if t[0] in ("rdfs:label", "rdfs:comment"):
+            #     predname = t[0].split(":")[1]
+
+                    
+                    
 
             return candidates
             
@@ -263,22 +334,18 @@ class MappingProblem:
         for t in query.logic:
             candidates = self.get_candidates(t, classes)
             print("Triple: ", t)
+            candidates = util.groupby_max(candidates, 0)
+            candidates = sorted(candidates, reverse=True)
             for c in candidates:
                 print("    ", c)
 
-            # if t[0] in self.mappings:
-            #     m = self.mappings[t[0]]
-            # else:
-            #     print("Missing mapping for class/predicate: ", t[0])
-            #     m = ("dummyT_"+t[0], "dummyA1_"+t[0], "dummyA2_"+t[0])
-
-            m = candidates[0] # TODO more candidates
+            m = candidates[0][1:] # TODO more candidates
             froms.append(m[0])
             objects.add(t[1], (m[0], m[1]))
             if len(t) == 3:
                 objects.add(t[2], (m[0], m[2]))
 
-        selects = ["{}.{}".format(table, attribute) for (table, attribute) in objects.values()]
+        # selects = ["{}.{}".format(table, attribute) for (table, attribute) in objects.values()]
         wheres = []
         for k in objects.keys():
             columns = objects.get(k)
@@ -289,13 +356,16 @@ class MappingProblem:
                     if (t1 != t2 or a1 != a2):
                         wheres.append("{}.{}={}.{}".format(t1,a1,t2,a2))
 
-        selects = list(set(selects))
+        # selects = list(set(selects))
         froms = list(set(froms))
+        # froms = ["\"{}\"".format(f) for f in froms]
         wheres = list(set(wheres))
 
         if query.selects is None:
             sql = "SELECT COUNT(*)"
         else:
+            selects = [objects.get(s)[0] for s in query.selects]
+            selects = ["{}.{}".format(s[0], s[1]) for s in selects]
             sql = "SELECT " + ", ".join(selects)
         sql += " FROM " + ", ".join(froms)
         if len(wheres) > 0:

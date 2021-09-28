@@ -7,6 +7,7 @@ from cmt_renamed import problem
 # from cmt_structured import problem
 
 
+success = 0
 for query in problem.queries:
     print("\n**********************")
     print(query.filename)
@@ -25,13 +26,14 @@ for query in problem.queries:
     result2 = problem.cursor.fetchall()
 
     if result == result2:
+        success+=1
         print("!!!!PASSED!!!!") 
     else:
         print("!!!!FAILED!!!!")
-        util.print_result(result)
-        util.print_result(result2)
+        # util.print_result(result)
+        # util.print_result(result2)
         # assert False
-        
+print("Passed {} out of {}".format(success, len(problem.queries)))
         
         
 

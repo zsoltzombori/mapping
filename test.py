@@ -2,10 +2,18 @@ import rdflib
 import psycopg2
 
 import util
+import mappingProblem
 
-from cmt_renamed import problem
-# from cmt_structured import problem
+schema = "cmt_renamed"
+schema = "cmt_structured"
+# schema = "conference_structured"
+# schema = "conference_renamed"
 
+ontology = "RODI/data/{}/ontology.ttl".format(schema)
+query_dir = "RODI/data/{}/queries".format(schema)
+
+problem = mappingProblem.MappingProblem(schema, ontology, use_db=True)
+problem.add_query_dir(query_dir)
 
 success = 0
 for query in problem.queries:
@@ -20,15 +28,19 @@ for query in problem.queries:
     problem.cursor.execute(query.sql_query)
     result = problem.cursor.fetchall()
 
-    sql2 = problem.sparql2sql(query)
-    print("\n transformed query: ", sql2)
-    problem.cursor.execute(sql2)
-    result2 = problem.cursor.fetchall()
+    sql_candidates = problem.sparql2sql(query)
+    curr_succ = False
+    for sql2 in sql_candidates:
+        print("\n transformed query: ", sql2)
+        problem.cursor.execute(sql2)
+        result2 = problem.cursor.fetchall()
 
-    if result == result2:
-        success+=1
-        print("!!!!PASSED!!!!") 
-    else:
+        if result == result2:
+            success+=1
+            curr_succ = True
+            print("!!!!PASSED!!!!")
+            break
+    if not curr_succ:
         print("!!!!FAILED!!!!")
         # util.print_result(result)
         # util.print_result(result2)

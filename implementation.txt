@@ -93,3 +93,4 @@ union
 '/' + TABLE1.prlAreaPolyDateValidTo
 
 
+C(x):- 

@@ -53,7 +53,7 @@ def attributes(cursor, schema):
     result = cursor.fetchall()
     attributes = DictOfList()
     for r in result:
-        attributes.add(r[0], r[1])
+        attributes.add("\"{}\"".format(r[0]), "\"{}\"".format(r[1]))
     return attributes
 
 def inspect_database(cursor):
@@ -141,10 +141,11 @@ def compose_scores_and(scores):
 def groupby_max(rows, max_index):
     if len(rows) == 0:
         return rows
-    cols = len(rows[0])
+    cols = np.max([len(r) for r in rows])
     groupby_indices = list(range(cols))
     groupby_indices.remove(max_index)
-    df = pd.DataFrame(rows).groupby(groupby_indices).max().reset_index()
+    df = pd.DataFrame(rows).groupby(groupby_indices, dropna=False).max().reset_index()
     df = df[range(cols)]
-    return df.values.tolist()
+    result = df.stack().groupby(level=0).apply(list).tolist()
+    return result
     

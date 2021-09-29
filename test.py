@@ -4,10 +4,11 @@ import psycopg2
 import util
 import mappingProblem
 
-schema = "cmt_renamed"
-schema = "cmt_structured"
+# schema = "cmt_renamed"
+# schema = "cmt_structured"
 # schema = "conference_structured"
 # schema = "conference_renamed"
+schema = "npd_user_tests"
 
 ontology = "RODI/data/{}/ontology.ttl".format(schema)
 query_dir = "RODI/data/{}/queries".format(schema)

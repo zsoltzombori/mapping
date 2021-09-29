@@ -1,3 +1,114 @@
+####################
+2021.09.29
+
+Ontology:
+- Classes: person, company
+- Predicates: name(company union person -> string), worksFor(person -> company), isLeadBy (company -> person)
+
+Database:
+- t_person(pid, cid, pname, junk)
+- t_company(cid, pid, cname, junk)
+
+Suppose that we have the following mapping rules:
+c(X):- T.A(X).
+r(X,Y):- T.A1(X), T.A2(Y).
+
+Naively
+- person can be assigned to 8 table-attribute pairs.
+- company can be assigned to 4 attributes in the other table.
+- name can be assigned to 3 different attibutes for each class, giving 3 * 3 = 9 options
+- worksFor can be assigned to any of the remaining 4 attributes (in either table)
+- isLeadBy can be assigned to any of the remaining 3 attributes (in either table)
+
+This is 8*4*9*4*3 = 3456 possible mappings.
+We can eliminate many mappings based on type information.
+
+If we have any supervision on person/company, we can quickly eliminate all but two candidate columns for each: persons live in the pid columns, companies live in the cid columns
+If we have any supervision on worksFor/isLeadBy, we can quickly eliminate a lot of mappings purely based on what column pairs contain  the supervision pairs
+If we have supervision with more then pairs, we can eliminate more mappings, again based on what constants individual columns hold.
+
+Suppose that after all this elimination, some of the mappings are known:
+person(X):- t_person.pid(X).
+company(X):- t_company.cid(X).
+name(X:person, Y):- t_person.pid(X), t_person.pname(Y).
+name(X:company, Y):- t_company.cid(X), t_company.cname(Y).
+worksFor(X, Y):- t_person.pid(X), t_person.cid(Y).
+
+So we only need to figure out where isLeadBy reside. There are four candidates:
+isLeadBy(X, Y):- t_person.pid(Y), t_person.cid(X).
+isLeadBy(X, Y):- t_person.pid(Y), t_person.junk(X).
+isLeadBy(X, Y):- t_company.cid(X), t_company.pid(Y). # correct one
+isLeadBy(X, Y):- t_company.cid(X), t_company.junk(Y).
+
+Our mapping rule is like the aboves, but the body contains auxiliary predicates:
+isLeadBy(X, Y):- T.A1(X), T.A2(Y).
+Matching the candidates with our mapping rule gives scores s1, s2, s3, s4.
+We evaluate the database according to the four candidates and calculate an aggregate score for all of our supervision.
+The best coverage is provided by candidate#3, so a gradient step would move towards T->t_company, A1->cid, A2->pid,
+making s3 higher in the next round (and possibly but not necessarily making s1, s2, s4 smaller).
+
+This is the learning algorithm we had in mind. However, as soon as candidate#3 performs best, we can just stop and say that this is going to be our mapping.
+Why would we bother with learning?
+
+####################
+2021.09.29
+
+Note about the formalism:
+When I say below that
+T.A1(Y) where T_A2=X
+this is not a proper logical expression, but an sql query. It should be read as
+
+T'(C_1, C_2, …C_k), C_{I(A1)}=Y, C_{I(A2)}=X
+where I is a mapping from column names in table T to their position in relation T'
+
+*********************
+
+
+problem_set: npd_user_tests
+query: query1.qpair
+
+*********************
+name=Who are the licensees of production licence X and how big is their share?
+orderNum=1
+
+sql=SELECT DISTINCT a.prlName, a.cmpLongName, a.prlLicenseeInterest, a.prlLicenseeDateValidTo FROM licence_licensee_hst a WHERE a.prlLicenseeDateValidTo IN (SELECT MAX(b.prlLicenseeDateValidTo) FROM licence_licensee_hst b WHERE a.prlName = b.prlName GROUP BY b.prlName) ORDER BY a.prlName
+
+sparql=prefix npdv: <http://sws.ifi.uio.no/vocab/npd-v2> \n\
+SELECT DISTINCT ?licence ?licensee ?interest ?date WHERE { ?licenceURI a npdv:ProductionLicence ; npdv:name ?licence . [ ] a npdv:ProductionLicenceLicensee ; npdv:dateLicenseeValidFrom ?date ; npdv:licenseeInterest ?interest ; npdv:licenceLicensee [ npdv:name ?licensee ] ; npdv:licenseeForLicence ?licenceURI . { SELECT ?licenceURI (MAX(?d) AS ?date) WHERE { [ ] a npdv:ProductionLicenceLicensee ; npdv:dateLicenseeValidFrom ?d ; npdv:licenseeForLicence ?licenceURI . } GROUP BY ?licenceURI } } ORDER BY ?licence DESC(?interest)
+
+entityIdCols=
+entityIdVars=
+*********************
+
+mapping rules:
+
+npdv:ProductionLicence(X):-
+  source conditions: license_licensee_hst.prlnpdidlicence(X)
+
+npdv:ProductionLicenceLicensee(X):-
+  source conditions: license_licensee_hst.cmpnpdidcompany(X)
+
+npdv:name(X, Y):-
+  target conditions: rdf:type(X, npdv:ProductionLicence)
+  source conditions: license_licensee_hst.prlName(Y) where license_licensee_hst.prlnpdidlicence = X
+
+npdv:dateLicenseeValidFrom(X,Y):-
+  target conditions: rdf:type(X, npdv:ProductionLicenceLicensee)
+  source conditions: license_licensee_hst.prlLicenseeDateValidTo(Y) where license_licensee_hst.cmpnpdidcompany = X
+  # note there is probably a bug in the provided sql as it uses DateValidTo instead of DateValidFrom
+
+npdv:licenseeInterest(X, Y):-
+  target conditions: rdf:type(X, npdv:ProductionLicenceLicensee)
+  source_conditions: license_licensee_hst.prlLicenseeInterest(Y) where license_licensee_hst.cmpnpdidcompany = X
+
+npdv:licenceLicensee(X,Y):-
+  target conditions: rdf:type(X, npdv:ProductionLicenceLicensee)
+  source conditions: license_licensee_hst.cmpLongName(Y) where license_licensee_hst.cmpnpdidcompany = X
+  # note this is an approximation. Y is in fact an entity (company) whose :name property is license_licensee_hst.cmpLongName
+
+
+####################
+
 Use the RODI benchmark
 
 Supervision:

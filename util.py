@@ -35,7 +35,7 @@ def print_result(table):
         print(t)
 
 def inspect_schema(cursor, schema):
-    s = "select table_name, column_name from information_schema.columns where table_schema='{}'".format(schema)
+    s = "select table_name, column_name from information_schema.columns where table_schema='{}' ORDER BY table_name".format(schema)
     cursor.execute(s)
     result = cursor.fetchall()
     print("\nTables for schema '{}':".format(schema))

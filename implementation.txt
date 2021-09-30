@@ -1,3 +1,89 @@
+2021.09.30
+
+Suppose the source consists of
+- unary facts S(a), derived from some column in some table
+- binary facts R(a,b) derived seom some pair of columns in some table
+
+Suppose we have an embedding of all
+- source predicates (unary, binary)
+- auxiliary predicates
+- source/target constants
+
+Suppose that source/target constants are the same
+
+Suppose that the body contains on variables that are not connected to
+any constant or head variable via some relational chain. So we
+disallow rules like
+H(X):- A(X), B(Y).
+
+We collect candidate proofs for a supervision fact using exact
+matching on the constants and fuzzy matching on the predicates.
+
+
+# BodyList: atom from the body of a rule
+# Subst: key-value pairs mapping some variables in the body to constants
+#        Subst(B) is shorthand for applying Subst to B
+# Mapping: key-value pairs mapping some auxiliary body predicates to source predicates
+# we assume a fuction embeddingScore: Mapping -> [0,1]
+# return: list of mappings of auxiliary predicates to source predicates that yield a solution to the supervision
+def candidate_mappings(Body, Subst, Mapping):
+
+   if len(Body) == 0:
+      return [Mapping]
+    
+   select B in Body, such that #variables is minimal in Subst(B)
+   Body2 is Body \ {B}
+
+   Facts is all facts from the source can be soft unified with Subs(B)
+   # have the same arity as B and has the same constant in the same position
+   # since Subst(B) contains some constants, Facts is much smaller than the dataset
+
+   result = []
+   for F in Fact:
+       Subs2 is Subst + mgu(Subst(B), F)
+       Mapping2 is Mapping + {pred(B) -> pred(F)}
+       score = embeddingScore(Mapping2)
+       # if there are too many candidate facts in Facts, sample from them based on score
+       # for negative samples, it is ok to use a threshold for score
+       # for positive samples, farther candidates should have a chance too
+
+       new_mappings = candidate_mappings(Body2, Subst2, Mapping2)
+       result += new_mappings
+
+   return result
+
+for each s in P union N:
+    target_s = 1 if s in P else 0
+    for each rule H:-Body with fitting head:
+    	Subst0 is mgu(p,H)
+	mappings = candidate_mappings(Body, Subst0, [])
+	scores = [embeddingScore(m) for m in Mappings]
+	score = sum(scores * softmax(scores))
+	loss = (target_s - score)^2
+	update embedding to reduce loss
+
+
+####################
+2021.09.30
+
+Ontology:
+- Classes: person
+
+Database:
+- t_person(pid, cid)
+
+Suppose that we have the following mapping rule:
+person(X):- t_person.A(X).
+
+where A is an auxiliary predicate to be matched with one of the columns of t_person.
+
+Unifying A with pid, cid gives scores s1, s2.
+
+person(a) how has two potential proofs
+	  T_person.pid(a) or T_person.cid(a)
+
+If one proof is better for some a_i and the other is better for some other a_j, then it make sense to learn which one we select eventually.
+
 ####################
 2021.09.29
 

@@ -5,6 +5,7 @@ import itertools
 
 import util
 import query
+from rule import Rule, Variable
 
 class MappingProblem:
     def __init__(self, schema, ontology, use_db=True):
@@ -28,50 +29,35 @@ class MappingProblem:
 
             self.db_attributes = util.attributes(self.cursor, self.schema)
             self.db_tables = self.db_attributes.keys()
+            self.preds = util.db2preds(self.cursor, self.schema)
+            
+
+            self.constants = util.schema_constants(self.cursor, self.schema)
+            print("constants: ", len(self.constants))
+
+            rule = Rule([["c",Variable(1)],["a",Variable(1),Variable(2)],["b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds)
+            rule = Rule([["c",Variable(1)],["a",Variable(1)]], self.cursor, self.schema, self.preds)
+
+            total_matches = 0
+            for c0 in self.constants:
+                mappings = rule.candidate_mappings(rule.body, {1:c0}, {})
+                print("support size for {}: {}".format(c0, len(mappings)))
+                total_matches += len(mappings)
+
+            print("average matches: {}".format(total_matches / len(self.constants)))
+            xxx
+
         else:
             self.cursor = None
-            self. db_tables = [
-                "persons",
-                "conferences",
-                "reviews",
-                "reviewers",
-                "conference_members",
-                "authors",
-                "co_authors",
-                "documents",
-                "paper_full_versions",
-                "paper_abstracts",
-                "program_committees",
-                "pc_members",
-                "program_committee_chairs",
-                "co_author_paper",
-                "paper_reviewer",
-                "program_committee_member"
-            ]
-            self.db_attributes={
-                "persons": ["id", "name", "email"],
-                "conferences": ["id", "site_url", "accepts_hardcopy_submissions", "logo_url", "date", "name", "reviews_per_paper"],
-                "reviews": ["id"],
-                "reviewers": ["id"],
-                "conference_members": ["id"],
-                "authors": ["id"],
-                "co_authors": ["id"],
-                "documents": ["id"],
-                "paper_full_versions": ["id"],
-                "paper_abstracts": ["id"],
-                "program_committees": ["id"],
-                "pc_members": ["id"],
-                "program_committee_chairs": ["id"],
-                "co_author_paper": ["id"],
-                "paper_reviewer": ["id"],
-                "program_committee_member": ["id"],
-            }
+            self.db_tables = None
+            self.db_attributes = None
 
 
         self.classes = self.get_classes()
         # print(self.classes)
         self.properties = self.get_properties()
         # print(self.properties)
+
 
 
     def add_query_dir(self, query_dir):

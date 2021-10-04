@@ -48,12 +48,12 @@ def table_names(cursor, schema):
     return [r[0] for r in result]
 
 def attributes(cursor, schema):
-    s = "select table_name, column_name from information_schema.columns where table_schema='{}'".format(schema)
+    s = "select table_name, column_name, data_type from information_schema.columns where table_schema='{}'".format(schema)
     cursor.execute(s)
     result = cursor.fetchall()
     attributes = DictOfList()
     for r in result:
-        attributes.add("\"{}\"".format(r[0]), "\"{}\"".format(r[1]))
+        attributes.add(r[0], [r[1], r[2]])
     return attributes
 
 def inspect_database(cursor):
@@ -68,6 +68,22 @@ def inspect_database(cursor):
             print(schema)
         print("    {}".format(row[1]))
 
+def schema_constants(cursor, schema):
+    s = "select table_name, column_name from information_schema.columns where table_schema='{}'".format(schema)
+    cursor.execute(s)
+    result = cursor.fetchall()
+    constants = []
+    for r in result:
+        table = r[0]
+        column = r[1]
+        s = "select distinct \"{}\" from \"{}\";".format(column, table)
+        cursor.execute(s)
+        result2 = cursor.fetchall()
+        result2 = [r[0] for r in result2]
+        result2 = list(set(result2))
+        constants += result2
+    constants = list(set(constants))
+    return constants
 
 def sparql_result_to_list(qres, colname):
     result = []
@@ -109,7 +125,7 @@ def compare_strings(reference, candidate):
 def top_candidates(reference, candidates, threshold=0.01):
     
     reference0 = list(reference.lower())
-    candidates0 = [list(c.lower()) for c in candidates]
+    candidates0 = [list(c[0].lower()) for c in candidates]
     if len(reference0) < 4:
         weights = [1/len(reference0) for _ in range(len(reference0))]
     else:
@@ -118,7 +134,7 @@ def top_candidates(reference, candidates, threshold=0.01):
     sim_scores2 = [ (sim_scores[i],i) for i in range(len(sim_scores)) ]
     sim_scores2.sort(reverse=True)
     sorted_scores, perm = zip(*sim_scores2)
-    sorted_candidates = [candidates[p] for p in perm]
+    sorted_candidates = [candidates[p][0] for p in perm]
     best = []
     best_scores = []
     
@@ -149,3 +165,17 @@ def groupby_max(rows, max_index):
     result = df.stack().groupby(level=0).apply(list).tolist()
     return result
     
+
+# collect all table/column pairs and table/column1/column2 triples
+def db2preds(cursor, schema):
+    cursor.execute("select table_name, column_name, data_type from information_schema.columns where table_schema=%s", (schema,))
+    unaries = []
+    binaries = []
+    result = cursor.fetchall()
+    for r1 in result:
+        unaries.append(r1)
+        for r2 in result:
+            if r1[0] == r2[0] and r1[1] != r2[1]:
+                binaries.append((r1, r2))
+    return {"unary": unaries, "binary": binaries}
+

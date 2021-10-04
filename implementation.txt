@@ -1,3 +1,42 @@
+####################
+2021.10.01
+
+RODI synthetic datasets contain around 5K constants
+RODI Norwegian contains around 200K constants
+Embed the database using TransH
+
+For each supervision and each fitting rule, collect candidate proofs in the form of
+- mapping of body predicates
+- variable instantiations
+
+
+
+
+
+####################
+2021.10.01
+
+Embed:
+C(a): emb(C) = emb(a)
+R(a,b): emb(a) + emb(R) = emb(b)
+
+Example
+
+Author(a):- Person_id_type(a,1)
+Author(a):- Author_id(a)
+
+Author(X):- A1(X,Y).
+Author(X):- A2(X).
+
+A2 objective
+   emb(A2) = emb(Author_id)
+   emb(A2) = =emb(a)
+
+A1 objective
+   emb(A1) = emb(Person_id_type)
+   emb(a) + emb(A1) = emb(1)
+
+####################
 2021.09.30
 
 Suppose the source consists of

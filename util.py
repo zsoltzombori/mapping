@@ -35,7 +35,7 @@ def print_result(table):
         print(t)
 
 def inspect_schema(cursor, schema):
-    s = "select table_name, column_name from information_schema.columns where table_schema='{}' ORDER BY table_name".format(schema)
+    s = "select table_name, column_name, data_type from information_schema.columns where table_schema='{}' ORDER BY table_name".format(schema)
     cursor.execute(s)
     result = cursor.fetchall()
     print("\nTables for schema '{}':".format(schema))
@@ -55,6 +55,14 @@ def attributes(cursor, schema):
     for r in result:
         attributes.add(r[0], [r[1], r[2]])
     return attributes
+
+def db_types(db_attributes):
+    types = []
+    for table in db_attributes.keys():
+        for n, t in db_attributes.get(table):
+            types.append(t)
+    types = list(set(types))
+    return types
 
 def inspect_database(cursor):
     s = "SELECT * FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema';"

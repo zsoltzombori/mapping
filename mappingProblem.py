@@ -30,22 +30,25 @@ class MappingProblem:
             self.db_attributes = util.attributes(self.cursor, self.schema)
             self.db_tables = self.db_attributes.keys()
             self.preds = util.db2preds(self.cursor, self.schema)
-            
+            self.types = util.db_types(self.db_attributes)
 
             self.constants = util.schema_constants(self.cursor, self.schema)
             print("constants: ", len(self.constants))
 
             rule = Rule([["c",Variable(1)],["a",Variable(1),Variable(2)],["b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds)
-            rule = Rule([["c",Variable(1)],["a",Variable(1)]], self.cursor, self.schema, self.preds)
+            rule2 = Rule([["c",Variable(1)],["a",Variable(1)]], self.cursor, self.schema, self.preds)
 
             total_matches = 0
+            i = 0
             for c0 in self.constants:
+                i += 1
                 mappings = rule.candidate_mappings(rule.body, {1:c0}, {})
-                print("support size for {}: {}".format(c0, len(mappings)))
+                print("{} support size for {}: {}".format(i, c0, len(mappings)))
                 total_matches += len(mappings)
 
             print("average matches: {}".format(total_matches / len(self.constants)))
             xxx
+
 
         else:
             self.cursor = None

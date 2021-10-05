@@ -1,4 +1,5 @@
 import datetime
+import decimal
 
 class Variable:
     def __init__(self, number):
@@ -38,9 +39,9 @@ class Rule:
             result = not isinstance(obj, float)
         elif sql_type in ("smallint", "integer", "bigint"):
             result = not isinstance(obj, int)
-        # elif sql_type in ("numeric", "decimal"):
-        #     result = not TODO
-        elif sql_type in ("varchar", "text"):
+        elif sql_type == "numeric":
+             result = not isinstance(obj, decimal.Decimal)
+        elif sql_type in ("varchar", "text", "character varying", "character"):
             result = not isinstance(obj, str)
         elif sql_type == "date":
             result = not isinstance(obj, datetime.date)
@@ -53,7 +54,7 @@ class Rule:
         elif sql_type == "ARRAY":
             result = not isinstance(obj, list)
         else:
-            result = True
+            result = False
         return result
 
     def unifying_facts(self, atom):
@@ -73,9 +74,10 @@ class Rule:
         if unary:
             for t in targets:
                 table0, column0, type0 = t
+                sql = "SELECT {} from \"{}\" where {}=%s".format(column0, table0, column0)
                 if self.type_mismatch(type0, args[0]):
                     continue
-                sql = "SELECT {} from \"{}\" where {}=%s".format(column0, table0, column0)
+                
                 self.cursor.execute(sql, (args[0],))
                 result = self.cursor.fetchall()
                 for r in result:

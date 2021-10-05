@@ -1,4 +1,25 @@
 ####################
+2021.10.05
+
+pseudocode for training
+
+for F in {facts in the supervision}:
+    for R in {rules matching F}:
+        Rloss_vect = []
+    	for B in {bodies associated with R}:
+    	    Loss(B) = 0
+    	    for A in {atoms in B}:
+    	    	Loss(A) = {some differentiable formula of our parameters}
+	    	Loss(B) += Loss(A)
+    	    RLoss_vect.append(Loss(B))
+    	Loss(R) = sum(RLoss_vect * softmin(RLoss_vect))
+	# softmin is over a large set
+    Loss(F) = min {Loss(R) | R in rules matching F}
+    # min is over a small set
+
+
+
+####################
 2021.10.01
 
 RODI synthetic datasets contain around 5K constants

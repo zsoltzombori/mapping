@@ -30,31 +30,31 @@ class Rule:
             args2.append(a2)
         return varcnt, atom[:1] + args2
 
-    def type_mismatch(self, sql_type, obj):
+    def type_match(self, sql_type, obj):
         if sql_type == "NULL":
-            result = obj is not None
-        elif sql_type == "bool":
-            result = not isinstance(obj, bool)
+            result = obj is None
+        elif sql_type == "boolean":
+            result = isinstance(obj, bool)
         elif sql_type in ("real", "double"):
-            result = not isinstance(obj, float)
+            result = isinstance(obj, float)
         elif sql_type in ("smallint", "integer", "bigint"):
-            result = not isinstance(obj, int)
+            result = isinstance(obj, int) and not isinstance(obj, bool)
         elif sql_type == "numeric":
-             result = not isinstance(obj, decimal.Decimal)
+             result = isinstance(obj, decimal.Decimal)
         elif sql_type in ("varchar", "text", "character varying", "character"):
-            result = not isinstance(obj, str)
+            result = isinstance(obj, str)
         elif sql_type == "date":
-            result = not isinstance(obj, datetime.date)
+            result = isinstance(obj, datetime.date)
         elif sql_type in ("time", "timetz"):
-            result = not isinstance(obj, datetime.time)
+            result = isinstance(obj, datetime.time)
         elif sql_type in ("datetime", "datetimetz"):
-            result = not isinstance(obj, datetime.datetime)
+            result = isinstance(obj, datetime.datetime)
         elif sql_type == "interval":
-            result = not isinstance(obj, datetime.timedelta)
+            result = isinstance(obj, datetime.timedelta)
         elif sql_type == "ARRAY":
-            result = not isinstance(obj, list)
+            result = isinstance(obj, list)
         else:
-            result = False
+            result = True
         return result
 
     def unifying_facts(self, atom):
@@ -74,33 +74,36 @@ class Rule:
         if unary:
             for t in targets:
                 table0, column0, type0 = t
-                sql = "SELECT {} from \"{}\" where {}=%s".format(column0, table0, column0)
-                if self.type_mismatch(type0, args[0]):
-                    continue
-                
-                self.cursor.execute(sql, (args[0],))
-                result = self.cursor.fetchall()
-                for r in result:
-                    if r[0] is not None:
-                        matches.append( (atom[0], (table0, column0), (r[0],)))
+                sql = "SELECT \"{}\" from \"{}\" where \"{}\"=%s".format(column0, table0, column0)
+                if self.type_match(type0, args[0]):
+                    self.cursor.execute(sql, (args[0],))
+                    result = self.cursor.fetchall()
+                    for r in result:
+                        if r[0] is not None:
+                            matches.append( (atom[0], (table0, column0), (r[0],)))
         else:
             for t in targets:
                 ((table0, column0, type0), (table1, column1, type1)) = t
                 assert table0 == table1
-                sql = "SELECT {}, {} from \"{}\"".format(column0, column1, table0)
-                
-                if isinstance(args[0], Variable) and not self.type_mismatch(type1, args[1]):
-                    self.cursor.execute(sql + " where {}=%s".format(column1),  (args[1],))
-                elif isinstance(args[1], Variable) and not self.type_mismatch(type0, args[0]):
-                    self.cursor.execute(sql + " where {}=%s".format(column0),  (args[0],))
-                elif not (self.type_mismatch(type0, args[0]) or self.type_mismatch(type1, args[1])):
-                    self.cursor.execute(sql + " where {}=%s and {}=%s".format(column0, column1),  (args[0], args1))
-                    self.cursor.execute(sql, (args[0], args[1]))
+                sql = "SELECT \"{}\", \"{}\" from \"{}\"".format(column0, column1, table0)
 
-                result = self.cursor.fetchall()
-                for r in result:
-                    if r[0] is not None and r[1] is not None:
-                        matches.append((atom[0], (table0, column0, column1), (r[0], r[1])))
+                result = None
+                if isinstance(args[0], Variable):
+                    if self.type_match(type1, args[1]):
+                        self.cursor.execute(sql + " where \"{}\"=%s".format(column1),  (args[1],))
+                        result = self.cursor.fetchall()
+                elif isinstance(args[1], Variable):
+                    if self.type_match(type0, args[0]):
+                        self.cursor.execute(sql + " where \"{}\"=%s".format(column0),  (args[0],))
+                        result = self.cursor.fetchall()
+                elif self.type_match(type0, args[0]) and self.type_match(type1, args[1]):
+                    self.cursor.execute(sql + " where \"{}\"=%s and \"{}\"=%s".format(column0, column1),  (args[0], args[1]))
+                    result = self.cursor.fetchall()
+
+                if result is not None:
+                    for r in result:
+                        if r[0] is not None and r[1] is not None:
+                            matches.append((atom[0], (table0, column0, column1), (r[0], r[1])))
 
         return matches
 

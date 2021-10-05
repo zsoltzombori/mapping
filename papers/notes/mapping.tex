@@ -1,0 +1,59 @@
+\documentclass{easychair}
+\usepackage[utf8]{inputenc}
+\usepackage{xspace}
+\usepackage[parfill]{parskip}
+\usepackage[title]{appendix}
+\usepackage{paralist}
+\usepackage{amsmath}
+
+\newcommand{\p}{proj}
+\newcommand{\body}{body}
+\newcommand{\atom}{atom}
+\newcommand{\rule}{rule}
+
+\title{Learning Based Relational-to-Ontology Mapping}
+
+\begin{document}
+
+\author{
+  author\inst{1}
+}
+
+\institute{
+  institute, Oxford
+}
+
+
+\maketitle
+
+\section{Terminology}
+
+Let us suppose that we only have unary and binary relations. The
+source database contains facts of the form
+
+\begin{align}
+  C(a) \\
+  R(a, b)
+\end{align}
+
+We have a set of positive facts
+
+
+\section{Training}
+
+\begin{itemize}
+\item $\mathcal{L}(C_s(a)) = ||\p(\vec{a},C_s) - \vec{C_s}||_2$.
+\item $\mathcal{L}(R_s(a,b)) = ||\p(\vec{a},R_s) + \vec{R_s} - \p(\vec{b},R_s)||_2$.
+\item $\mathcal{L}([C_a(a), C_s]) = ||\p(\vec{a},C_a) - \vec{C_a}||_2 + ||\vec{C_a} - \vec{C_s}||_2$.
+\item $\mathcal{L}([R_a(a,b), R_s]) = ||\p(\vec{a},R_a) + \vec{R_a} - \p(\vec{b},R_a)||_2 + ||\vec{R_a} - \vec{R_s}||_2$.
+\item $\mathcal{L}(\body) = \sum_{(\atom_a, R_s) \in \body} \mathcal{L}(\atom_a, R_s)$
+\item $\mathcal{L}(\rule) = \sum_{(\atom_a, R_s) \in \body} \mathcal{L}(\atom_a, R_s)$
+\item
+
+\end{itemize}
+
+
+
+
+
+\end{document}

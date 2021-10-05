@@ -31,6 +31,8 @@ class MappingProblem:
             self.db_tables = self.db_attributes.keys()
             self.preds = util.db2preds(self.cursor, self.schema)
             self.types = util.db_types(self.db_attributes)
+            print("types: ", self.types)
+            
 
             self.constants = util.schema_constants(self.cursor, self.schema)
             print("constants: ", len(self.constants))
@@ -40,7 +42,8 @@ class MappingProblem:
 
             total_matches = 0
             i = 0
-            for c0 in self.constants:
+            for c0 in [self.constants[1]]:
+                print("constant: ", c0)
                 i += 1
                 mappings = rule.candidate_mappings(rule.body, {1:c0}, {})
                 print("{} support size for {}: {}".format(i, c0, len(mappings)))

@@ -13,7 +13,7 @@ schema = "cmt_structured"
 ontology = "RODI/data/{}/ontology.ttl".format(schema)
 query_dir = "RODI/data/{}/queries".format(schema)
 
-problem = mappingProblem.MappingProblem(schema, ontology, use_db=True)
+problem = mappingProblem.MappingProblem(schema, ontology)
 problem.add_query_dir(query_dir)
 
 success = 0

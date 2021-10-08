@@ -2,68 +2,107 @@ import rdflib
 import psycopg2
 import os
 import itertools
+import time
 
 import util
 import query
-from rule import Rule, Variable
+from rule import Rule, Variable, Constant
+import train
 
 class MappingProblem:
-    def __init__(self, schema, ontology, use_db=True):
+    def __init__(self, schema, ontology):
         self.schema = schema
         self.ontology = ontology
         self.graph = rdflib.Graph()
         self.graph.parse(ontology)
         self.queries = []
-        self.use_db = use_db
 
         self.namespaces = namespaces = {
             'owl': rdflib.Namespace("http://www.w3.org/2002/07/owl#"),
             'rdfs': rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#"),
         }
 
-        if self.use_db:
-            self.cursor = util.init_db()
-            util.inspect_database(self.cursor)
-            util.inspect_schema(self.cursor, self.schema)
-            self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
+        self.cursor = util.init_db()
+        util.inspect_database(self.cursor)
+        util.inspect_schema(self.cursor, self.schema)
+        self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
 
-            self.db_attributes = util.attributes(self.cursor, self.schema)
-            self.db_tables = self.db_attributes.keys()
-            self.preds = util.db2preds(self.cursor, self.schema)
-            self.types = util.db_types(self.db_attributes)
-            print("types: ", self.types)
-            
+        self.db_attributes = util.attributes(self.cursor, self.schema)
+        self.db_tables = self.db_attributes.keys()
+        self.preds = util.db2preds(self.cursor, self.schema)
 
-            self.constants = util.schema_constants(self.cursor, self.schema)
-            print("constants: ", len(self.constants))
-
-            rule = Rule([["c",Variable(1)],["a",Variable(1),Variable(2)],["b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds)
-            rule2 = Rule([["c",Variable(1)],["a",Variable(1)]], self.cursor, self.schema, self.preds)
-
-            total_matches = 0
-            i = 0
-            for c0 in [self.constants[1]]:
-                print("constant: ", c0)
-                i += 1
-                mappings = rule.candidate_mappings(rule.body, {1:c0}, {})
-                print("{} support size for {}: {}".format(i, c0, len(mappings)))
-                total_matches += len(mappings)
-
-            print("average matches: {}".format(total_matches / len(self.constants)))
-            xxx
-
-
-        else:
-            self.cursor = None
-            self.db_tables = None
-            self.db_attributes = None
-
-
+        self.types = util.db_types(self.db_attributes)
+        # print("types: ", self.types)            
+        self.constants = util.schema_constants(self.cursor, self.schema)
+        # print("constants: ", len(self.constants))
         self.classes = self.get_classes()
         # print(self.classes)
         self.properties = self.get_properties()
         # print(self.properties)
 
+        self.rules = [            
+            Rule([["Author",Variable(1)],["pred1a",Variable(1),Variable(2)],["pred1b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds),
+            Rule([["Author",Variable(1)],["pred2a",Variable(1)]], self.cursor, self.schema, self.preds),
+            Rule([["Author",Variable(1)],["pred3a",Variable(1),Constant("const3a")]], self.cursor, self.schema, self.preds),
+        ]
+            
+        self.positives = [
+            ["Author", 179],
+            ["Author", 1089],
+            ["Author", 316],
+        ]
+
+        self.negatives = [
+            ["Author", 1],
+            ["Author", 2],
+            ["Author", 3],
+        ]
+
+        self.emap = train.EmbeddingMap(4)
+        self.layers = []
+
+        t0 = time.time()
+        print("Collecting support...")
+        for p in self.positives:
+            mappings_list = []
+            for r in self.rules:
+                mappings = r.get_support(p)
+                mappings_list.append(mappings)
+            self.layers.append(train.MappingLayer(mappings_list, self.emap))
+        t1 = time.time()
+        print("Collecting support took {} sec.".format(t1 - t0))
+
+        print("Training...")
+        train.train(self.layers, 10, self.emap, 1.0)
+        t2 = time.time()
+        print("Training took {} sec.".format(t2 - t1))
+        
+            
+
+
+            # total_matches = 0
+            # i = 0
+            # # for c0 in self.constants:
+            # for c0 in [
+            #         ["head", 179],
+            #         ["head", 1089],
+            #         ["head", 316],
+            # ]: 
+            #     print("fact: ", c0)
+            #     i += 1
+            #     mappings = rule3.get_support(c0)
+            #     print("{} support size for {}: {}".format(i, c0, len(mappings)))
+            #     total_matches += len(mappings)
+
+            #     for m in mappings:
+            #         print(m)
+
+
+            # print("average matches: {}".format(total_matches / len(self.constants)))
+            # xxx
+
+    # def add_rules(self, rules):
+    #     self.rules += rules
 
 
     def add_query_dir(self, query_dir):

@@ -1,4 +1,16 @@
 ####################
+2021.10.06
+
+
+What if we don't embed constants
+Only embed predicates
+
+Loss is just the distance between the target and auxiliary
+predicates that appear in the mapping are pushed towards
+each other
+
+
+####################
 2021.10.05
 
 pseudocode for training
@@ -17,7 +29,10 @@ for F in {facts in the supervision}:
     Loss(F) = min {Loss(R) | R in rules matching F}
     # min is over a small set
 
+create a tf/pt model for each fact in the supervision
+the model refers to embedding vectors (identified by name)
 
+one extra model for plain embedding of source db preds/constants
 
 ####################
 2021.10.01

@@ -1,5 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
+from functools import partial
+import time
 
 class EmbeddingMap:
     def __init__(self, dim):
@@ -89,8 +91,14 @@ def mapping2loss(mapping, emap):
     return loss, vars
 
 def softmin(tensor, Temp):
-    e = 1.0e-1
-    return tf.exp(-tensor/(Temp+e)) / tf.reduce_sum(tf.exp(-tensor/(Temp+e)), axis=0)
+    e = 0.1
+    tensor2 = tensor/(Temp+e)
+    exps = tf.exp(tensor2 - tf.reduce_min(tensor2))
+    return exps / tf.reduce_sum(exps, axis=0)
+
+def reduce_softmin(tensor, Temp):
+    sm = softmin(tensor, Temp)
+    return tf.reduce_sum(tensor * sm)
 
 def rule2loss(mappings, emap, Temp):
     losses = []
@@ -120,32 +128,61 @@ def fact2loss(mappings_list, emap, Temp):
     index = tf.argmin(losses)
     return loss, vars, (index, indices[index])
 
-emap = EmbeddingMap(4)
-optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3)
-
-
-for i in range(1000):
-    with tf.GradientTape() as g:
-        loss, vars, index = fact2loss([mappings1, mappings2], emap, 2/(i+1))
-        print(i, "loss: ", loss)
-        # print("index: ", index)
-        if i % 100 == 0:
-            emap.print()
-            emap.find_closest("aconst","sconst")
-            emap.find_closest("apred", "spred")
-        grads = g.gradient(loss, vars)
-        optimizer.apply_gradients(zip(grads, vars))
-
-emap.find_closest("aconst","sconst")
-emap.find_closest("apred", "spred")
-
 class MappingLayer(keras.layers.Layer):
-    def __init__(self, mappings_list, emap, Temp):
+    def __init__(self, mappings_list, emap):
         super(MappingLayer, self).__init__()
-        self.loss, self.vars, self.index = fact2loss(mappings_list, emap, Temp)
+        self.emap = emap
+        self.mappings_list = mappings_list
+        # self.vars = []
+        # loss_list = []
+        # row_splits = [0]
+        # for mappings in mappings_list:
+        #     for m in mappings:
+        #         loss, vars = mapping2loss(m, emap)
+        #         loss_list.append(loss)
+        #         self.vars += vars
+        #     row_splits.append(len(loss_list))
+        # self.loss_tensor = tf.RaggedTensor.from_row_splits(values=loss_list, row_splits=row_splits)
 
-    def call(self, inputs):
-        pass
+    def call(self, Temp):
+        var_list = []
+        loss_list = []
+        row_splits = [0]
+        for mappings in self.mappings_list:
+            for m in mappings:
+                loss, vars = mapping2loss(m, self.emap)
+                loss_list.append(loss)
+                var_list += vars
+            row_splits.append(len(loss_list))
+        self.loss_tensor = tf.RaggedTensor.from_row_splits(values=loss_list, row_splits=row_splits)
+        reduce_partial = partial(reduce_softmin, Temp=Temp)
+        losses = tf.map_fn(reduce_partial, self.loss_tensor, fn_output_signature=tf.float32)
+        loss = tf.reduce_min(losses)
+        return loss, var_list
+
+# emap = EmbeddingMap(4)
+# model = MappingLayer([mappings1, mappings2], emap)
+
+def train(layers, epochs, emap, T):
+    optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3)
+    for i in range(epochs):
+        t0 = time.time()
+        total_loss = 0
+        for l in layers:
+            with tf.GradientTape() as g:
+                loss, vars = l(T)
+                total_loss += loss.numpy()
+            grads = g.gradient(loss, vars)
+            optimizer.apply_gradients(zip(grads, vars))
+        t1 = time.time()
+        print("Epoch {}, loss {}, time {} sec".format(i, loss, t1-t0))
+        # emap.print()
+        emap.find_closest("aconst","sconst")
+        emap.find_closest("apred", "spred")
+
+# emap.find_closest("aconst","sconst")
+# emap.find_closest("apred", "spred")
+
 
 # mapping rules
 # C(X):- A(X).

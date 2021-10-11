@@ -59,7 +59,8 @@ class MappingProblem:
         ]
 
         self.emap = train.EmbeddingMap(4)
-        self.layers = []
+        self.mappingFactory = train.MappingFactory(self.emap)
+        self.models = []
 
         t0 = time.time()
         print("Collecting support...")
@@ -68,12 +69,13 @@ class MappingProblem:
             for r in self.rules:
                 mappings = r.get_support(p)
                 mappings_list.append(mappings)
-            self.layers.append(train.MappingLayer(mappings_list, self.emap))
+            # self.models.append(train.MappingLayer(mappings_list, self.emap))
+            self.models.append(self.mappingFactory.create(mappings_list))
         t1 = time.time()
         print("Collecting support took {} sec.".format(t1 - t0))
 
         print("Training...")
-        train.train(self.layers, 10, self.emap, 1.0)
+        train.train(self.models, 10, self.emap, 1.0)
         t2 = time.time()
         print("Training took {} sec.".format(t2 - t1))
         

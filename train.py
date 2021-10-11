@@ -126,7 +126,17 @@ def fact2loss(mappings_list, emap, Temp):
     losses = tf.convert_to_tensor(losses)
     loss = tf.reduce_min(losses)
     index = tf.argmin(losses)
-    return loss, vars, (index, indices[index])
+    return loss, vars #, (index, indices[index])
+
+class MappingFactory():
+    def __init__(self, emap):
+        self.emap = emap
+
+    def create(self, mappings_list):
+        Temp = keras.Input(shape=(1, ))
+        loss, vars = fact2loss(mappings_list, self.emap, Temp)
+        model = keras.Model(inputs=Temp, outputs = (loss, vars))
+        return model
 
 class MappingLayer(keras.layers.Layer):
     def __init__(self, mappings_list, emap):

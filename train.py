@@ -2,6 +2,9 @@ import tensorflow as tf
 from tensorflow import keras
 from functools import partial
 import time
+import numpy as np
+
+tf.random.set_seed(20)
 
 class EmbeddingMap:
     def __init__(self, dim):
@@ -40,12 +43,12 @@ class EmbeddingMap:
         for n1 in d1:
             emb1 = d1[n1]
             closest = None
-            closest_dist = 1e10
+            closest_score = -100000
             for n2 in d2:
                 emb2 = d2[n2]
-                curr_dist = dist(emb1, emb2)
-                if curr_dist < closest_dist:
-                    closest_dist = curr_dist
+                curr_score = similarity(emb1, emb2)
+                if curr_score > closest_score:
+                    closest_score = curr_score
                     closest = n2
             print("{} is closest to {}".format(n1, closest))
                             
@@ -62,134 +65,257 @@ mappings2 = [
 ]
 
 
-def dist(emb1, emb2):
-    return tf.sqrt(tf.reduce_sum(tf.square(emb1 - emb2)))
+cosineSimilarity = keras.losses.CosineSimilarity()
 
-def mapping2loss(mapping, emap):
-    loss = tf.constant(0.0)
+# @tf.function
+def similarity(emb1, emb2):
+    # return -tf.sqrt(tf.reduce_sum(tf.square(emb1 - emb2)) / emb1.shape[0])
+    return tf.abs(cosineSimilarity(emb1, emb2))
+
+def mapping2score(mapping, emap):
+    score = tf.constant(1.0)
     vars = []
     for aux in mapping:
         pred, values = mapping[aux]
         if len(pred) == 1: # auxiliary constant
             emb_aux = emap.embedding(aux, "aconst")
             emb_source = emap.embedding(values[0], "sconst")
-            vars.append(emb_source)
-            loss += dist(emb_aux, emb_source)
+            # vars.append(emb_source)
+            score *= similarity(emb_aux, emb_source)
         elif len(pred) == 2: # unary predicate
             emb_aux = emap.embedding(aux, "apred")
             pred_name = "{}_{}".format(pred[0], pred[1])
             emb_pred = emap.embedding(pred_name, "spred")
-            vars.append(emb_pred)
-            loss += dist(emb_aux, emb_pred)
+            # vars.append(emb_pred)
+            score *= similarity(emb_aux, emb_pred)
         elif len(pred) == 3: # binary predicate
             emb_aux = emap.embedding(aux, "apred")
             pred_name = "{}_{}_{}".format(pred[0], pred[1], pred[2])
             emb_pred = emap.embedding(pred_name, "spred")
-            vars.append(emb_pred)
-            loss += dist(emb_aux, emb_pred)
+            # vars.append(emb_pred)
+            score *= similarity(emb_aux, emb_pred)
         vars.append(emb_aux)
-    return loss, vars
+    return score, vars
+
+# def mapping2pairs(mapping, emap):
+#     pairs = []
+#     var_names = []
+#     for aux in mapping:
+#         pred, values = mapping[aux]
+#         if len(pred) == 1: # auxiliary constant
+#             emb_aux = emap.embedding(aux, "aconst")
+#             emb_source = emap.embedding(values[0], "sconst")
+#             var_names.append((aux, "aconst"))
+#         elif len(pred) == 2: # unary predicate
+#             emb_aux = emap.embedding(aux, "apred")
+#             pred_name = "{}_{}".format(pred[0], pred[1])
+#             emb_source = emap.embedding(pred_name, "spred")
+#             var_names.append((aux, "spred"))
+#         elif len(pred) == 3: # binary predicate
+#             emb_aux = emap.embedding(aux, "apred")
+#             pred_name = "{}_{}_{}".format(pred[0], pred[1], pred[2])
+#             emb_source = emap.embedding(pred_name, "spred")
+#             var_names.append((aux, "spred"))
+#         pairs.append([emb_aux, emb_source])
+#     pairs = tf.convert_to_tensor(pairs)
+#     return pairs, var_names
+
 
 def softmin(tensor, Temp):
     e = 0.1
     tensor2 = tensor/(Temp+e)
-    exps = tf.exp(tensor2 - tf.reduce_min(tensor2))
+    exps = tf.exp(-tensor2 - tf.reduce_min(tensor2))
+    return exps / tf.reduce_sum(exps, axis=0)
+def softmax(tensor, Temp):
+    e = 0.1
+    tensor2 = tensor/(Temp+e)
+    exps = tf.exp(tensor2 - tf.reduce_max(tensor2))
     return exps / tf.reduce_sum(exps, axis=0)
 
-def reduce_softmin(tensor, Temp):
-    sm = softmin(tensor, Temp)
-    return tf.reduce_sum(tensor * sm)
+# def reduce_softmin(tensor, Temp):
+#     sm = softmin(tensor, Temp)
+#     return tf.reduce_sum(tensor * sm)
+# def reduce_softmax(tensor, Temp):
+#     sm = softmax(tensor, Temp)
+#     return tf.reduce_sum(tensor * sm)
 
-def rule2loss(mappings, emap, Temp):
-    losses = []
-    vars = []
-    for m in mappings:
-        l, v = mapping2loss(m, emap)
-        losses.append(l)
-        vars += v
-    losses = tf.convert_to_tensor(losses)
+# def rule2score(mappings, emap, Temp):
+#     scores = []
+#     vars = []
+#     for m in mappings:
+#         s, v = mapping2score(m, emap)
+#         scores.append(l)
+#         vars += v
+#     index = tf.argmax(scores)
+#     sm = softmax(scores, Temp)
+#     score = tf.reduce_sum(scores * sm)
+#     return score, vars, index
 
-    sm = softmin(losses, Temp)
-    loss = tf.reduce_sum(losses * sm)
-    index = tf.argmin(losses)
-    return loss, vars, index
-
-def fact2loss(mappings_list, emap, Temp):
-    losses = []
-    vars = []
-    indices = []
-    for m in mappings_list:
-        l, v, i = rule2loss(m, emap, Temp)
-        losses.append(l)
-        vars += v
-        indices.append(i)
-    losses = tf.convert_to_tensor(losses)
-    loss = tf.reduce_min(losses)
-    index = tf.argmin(losses)
-    return loss, vars #, (index, indices[index])
-
-class MappingFactory():
-    def __init__(self, emap):
-        self.emap = emap
-
-    def create(self, mappings_list):
-        Temp = keras.Input(shape=(1, ))
-        loss, vars = fact2loss(mappings_list, self.emap, Temp)
-        model = keras.Model(inputs=Temp, outputs = (loss, vars))
-        return model
+# def fact2score(mappings_list, emap, Temp):
+#     scores = []
+#     vars = []
+#     indices = []
+#     for m in mappings_list:
+#         s, v, i = rule2score(m, emap, Temp)
+#         scores.append(l)
+#         vars += v
+#         indices.append(i)
+#     scores = tf.convert_to_tensor(scores)
+#     score = tf.reduce_max(scores)
+#     index = tf.argmax(scores)
+#     return score, vars, (index, indices[index])
 
 class MappingLayer(keras.layers.Layer):
-    def __init__(self, mappings_list, emap):
+    def __init__(self, mappings_list, emap, fact, positive=True):
         super(MappingLayer, self).__init__()
         self.emap = emap
         self.mappings_list = mappings_list
-        # self.vars = []
-        # loss_list = []
-        # row_splits = [0]
-        # for mappings in mappings_list:
-        #     for m in mappings:
-        #         loss, vars = mapping2loss(m, emap)
-        #         loss_list.append(loss)
-        #         self.vars += vars
-        #     row_splits.append(len(loss_list))
-        # self.loss_tensor = tf.RaggedTensor.from_row_splits(values=loss_list, row_splits=row_splits)
+        self.fact = fact
+        self.positive = positive
+
+        self.emb_aux_list = []
+        self.emb_source_list = []
+        for mappings in mappings_list:
+            if len(mappings) > 0:
+                curr_emb_aux_list, curr_emb_source_list = self.process_mappings(mappings)
+                self.emb_aux_list.append(curr_emb_aux_list)
+                self.emb_source_list.append(curr_emb_source_list)
+
+    def process_mappings(self, mappings):
+        assert len(mappings) > 0
+        aux_names = mappings[0].keys()        
+        emb_aux_list = []
+        emb_source_list = [[] for _ in range(len(aux_names))]
+        first_row = True
+        for m in mappings:
+            for i, aux_name in enumerate(aux_names):
+                pred, values = m[aux_name]
+                if len(pred) == 1:
+                    atype = "aconst"
+                    emb_source = self.emap.embedding(values[0], "sconst")
+                elif len(pred) == 2:
+                    atype = "apred"
+                    pred_name = "{}_{}".format(pred[0], pred[1])
+                    emb_source = self.emap.embedding(pred_name, "spred")
+                elif len(pred) == 3:
+                    atype = "apred"
+                    pred_name = "{}_{}_{}".format(pred[0], pred[1], pred[2])
+                    emb_source = self.emap.embedding(pred_name, "spred")
+                if first_row:
+                    emb_aux = self.emap.embedding(aux_name, atype)
+                    emb_aux_list.append(emb_aux)
+                emb_source_list[i].append(emb_source)
+        return emb_aux_list, emb_source_list
+
 
     def call(self, Temp):
-        var_list = []
-        loss_list = []
-        row_splits = [0]
+        scores_per_rule1 = []
+        scores_per_rule2 = []
+        variables = []
+        source_loss = tf.constant(0.0)
+        for curr_emb_aux_list, curr_emb_source_list in zip(self.emb_aux_list, self.emb_source_list):
+            variables += curr_emb_aux_list
+            scores_per_pred = []
+            for emb_aux, emb_source in zip(curr_emb_aux_list, curr_emb_source_list):
+                for i, emb1 in enumerate(emb_source):
+                    variables.append(emb1)
+                    for j, emb2 in enumerate(emb_source):
+                        if j > i:
+                            variables.append(emb2)
+                            source_loss += similarity(emb1, emb2)
+                # variables += emb_source
+                partial_similarity = partial(similarity, emb2 = emb_aux)
+                scores = tf.map_fn(partial_similarity, tf.convert_to_tensor(emb_source), fn_output_signature=tf.float32)
+                scores_per_pred.append(scores)
+            score_per_pred = tf.reduce_prod(scores_per_pred, axis=0)
+            # score_per_rule1 = tf.reduce_sum(tf.square(score_per_pred) * softmax(score_per_pred, Temp))
+            score_per_rule1 = tf.reduce_max(score_per_pred)
+            score_per_rule2 = tf.reduce_max(score_per_pred)
+            scores_per_rule1.append(score_per_rule1)
+            scores_per_rule2.append(score_per_rule2)
+        if len(scores_per_rule1) == 0:
+            score1 = tf.constant(0.0)
+        else:
+            score1 = tf.reduce_max(scores_per_rule1)
+        if len(scores_per_rule2) == 0:
+            score2 = tf.constant(0.0)
+        else:
+            score2 = tf.reduce_max(scores_per_rule2)
+        
+        if self.positive:
+            loss1 = 1-score1
+            loss2 = 1-score2
+        else:
+            loss1 = score1
+            loss2 = score2
+        loss1 = tf.pow(loss1, 10)
+        loss1 += source_loss
+        return loss1, loss2, variables
+
+
+    def eval(self):
+        score_list = []
         for mappings in self.mappings_list:
             for m in mappings:
-                loss, vars = mapping2loss(m, self.emap)
-                loss_list.append(loss)
-                var_list += vars
-            row_splits.append(len(loss_list))
-        self.loss_tensor = tf.RaggedTensor.from_row_splits(values=loss_list, row_splits=row_splits)
-        reduce_partial = partial(reduce_softmin, Temp=Temp)
-        losses = tf.map_fn(reduce_partial, self.loss_tensor, fn_output_signature=tf.float32)
-        loss = tf.reduce_min(losses)
-        return loss, var_list
+                score, _vars = mapping2score(m, self.emap)
+                score_list.append(score.numpy())
+        if len(score_list) == 0:
+            score = 0.0
+        else:
+            score = np.max(score_list)
+        if self.positive:
+            loss = 1-score
+        else:
+            loss = score
 
-# emap = EmbeddingMap(4)
-# model = MappingLayer([mappings1, mappings2], emap)
+        print(self.fact, self.positive, " loss: ", loss)
+        return loss
+        
 
-def train(layers, epochs, emap, T):
-    optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3)
-    for i in range(epochs):
-        t0 = time.time()
-        total_loss = 0
-        for l in layers:
+def train(models, epochs, emap, batch_size=32, Tmax=10.0, Tmin=0.01, lr=0.001):
+    print("Datapoints: ", len(models))
+    assert len(models) > batch_size, "Batch size ({}) should be smaller than number of datapoints ({})".format(batch_size, len(models))
+
+    # Temp is going to be an exponentially diminishing curve that fits to Tmax and Tmin
+    # Temp = alpha * exp(-beta * (epoch+1))
+    beta = np.log(Tmax / Tmin) / (epochs-1)
+    alpha = Tmax / np.exp(-beta)
+
+    # optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+    t0 = time.time()    
+    for epoch in range(epochs):
+        T = alpha * np.exp(-beta * (epoch+1))
+        indices = np.random.permutation(len(models))
+        epoch_loss1 = 0
+        epoch_loss2 = 0
+        batch_grads = []
+        batch_vars = []
+        for i in range(len(models)):
+            index = indices[i]
+            m = models[index]
             with tf.GradientTape() as g:
-                loss, vars = l(T)
-                total_loss += loss.numpy()
-            grads = g.gradient(loss, vars)
-            optimizer.apply_gradients(zip(grads, vars))
+                loss1, loss2, vars = m(T)
+                epoch_loss1 += loss1.numpy()
+                epoch_loss2 += loss2.numpy()
+            grads = g.gradient(loss1, vars)
+            batch_grads += grads
+            batch_vars += vars
+            if (i+1) % batch_size == 0:
+                optimizer.apply_gradients(zip(batch_grads, batch_vars))
+                batch_grads = []
+                batch_vars = []
         t1 = time.time()
-        print("Epoch {}, loss {}, time {} sec".format(i, loss, t1-t0))
-        # emap.print()
+        print("Epoch {}, loss {}-{}, temp {}, time {} sec".format(epoch, epoch_loss1 / len(models), epoch_loss2 / len(models), T, t1-t0))
         emap.find_closest("aconst","sconst")
         emap.find_closest("apred", "spred")
 
+def eval(models):
+    loss = 0
+    for m in models:
+        loss += m.eval()
+    return loss / len(models)
+        
 # emap.find_closest("aconst","sconst")
 # emap.find_closest("apred", "spred")
 

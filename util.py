@@ -4,6 +4,7 @@ import rdflib
 from nltk.translate.bleu_score import sentence_bleu
 import numpy as np
 import pandas as pd
+import random
 
 # parse db configurations from file
 def config(filename='database.ini', section='postgresql'):
@@ -76,14 +77,17 @@ def inspect_database(cursor):
             print(schema)
         print("    {}".format(row[1]))
 
-def schema_constants(cursor, schema):
-    s = "select table_name, column_name from information_schema.columns where table_schema='{}'".format(schema)
+def schema_constants(cursor, schema, allowed_types=None):
+    s = "select table_name, column_name, data_type from information_schema.columns where table_schema='{}'".format(schema)
     cursor.execute(s)
     result = cursor.fetchall()
     constants = []
     for r in result:
         table = r[0]
         column = r[1]
+        dtype = r[2]
+        if allowed_types is not None and dtype not in allowed_types:
+            continue
         s = "select distinct \"{}\" from \"{}\";".format(column, table)
         cursor.execute(s)
         result2 = cursor.fetchall()
@@ -186,4 +190,26 @@ def db2preds(cursor, schema):
             if r1[0] == r2[0] and r1[1] != r2[1]:
                 binaries.append((r1, r2))
     return {"unary": unaries, "binary": binaries}
+
+def create_supervision(cursor, schema, predicate, query, size, constants):
+    cursor.execute(query)
+    result = cursor.fetchall()
+    result = list(set(result))
+    assert len(result) > 0
+    arity = len(result[0])
+    supervision = []
+
+    for i in range(size):
+        if i >= len(result):
+            break
+        positive = [predicate] + list(result[i])
+        while True:
+            tup = random.sample(constants, arity)
+            if tuple(tup) not in result:
+                negative = [predicate] + tup
+                break
+        supervision.append((positive, True))
+        supervision.append((negative, False))
+    return supervision
+
 

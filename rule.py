@@ -26,7 +26,7 @@ class Rule:
             return []
         if fact[0] != self.head[0]:
             return []
-            
+
         subst = {}
         for h_arg, f_arg in zip(self.head[1:], fact[1:]):
             if isinstance(h_arg, Variable):
@@ -56,7 +56,7 @@ class Rule:
         if unary:
             for t in targets:
                 table0, column0, type0 = t
-                sql = "SELECT \"{}\" from \"{}\" where \"{}\"=%s".format(column0, table0, column0)
+                sql = "SELECT DISTINCT \"{}\" from \"{}\" where \"{}\"=%s".format(column0, table0, column0)
                 if type_match(type0, args[0]):
                     self.cursor.execute(sql, (args[0],))
                     result = self.cursor.fetchall()
@@ -67,7 +67,7 @@ class Rule:
             for t in targets:
                 ((table0, column0, type0), (table1, column1, type1)) = t
                 assert table0 == table1
-                sql = "SELECT \"{}\", \"{}\" from \"{}\"".format(column0, column1, table0)
+                sql = "SELECT DISTINCT \"{}\", \"{}\" from \"{}\"".format(column0, column1, table0)
 
                 result = None
                 if isinstance(args[0], (Variable, Constant)):
@@ -95,7 +95,7 @@ class Rule:
             return [mapping]
         
         body_subst = [apply_subst(b, subst) for b in body]
-        # todo select the one with the least amount of variables
+        # TODO select the one with the least amount of variables
         B = body_subst[0][1]
         body2 = body[1:]
 

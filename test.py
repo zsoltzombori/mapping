@@ -1,11 +1,16 @@
 import rdflib
 import psycopg2
+import time
 
 import util
 import mappingProblem
+import supervision
+
+from rule import Rule, Variable, Constant
+import train
 
 schema = "cmt_renamed"
-schema = "cmt_structured"
+#schema = "cmt_structured"
 #schema = "conference_structured"
 #schema = "conference_renamed"
 #schema = "npd_user_tests"
@@ -14,6 +19,63 @@ ontology = "RODI/data/{}/ontology.ttl".format(schema)
 query_dir = "RODI/data/{}/queries".format(schema)
 
 problem = mappingProblem.MappingProblem(schema, ontology)
+emap = train.EmbeddingMap(32)
+
+# rules = [            
+#     Rule([["Person",Variable(1)],["pred2a",Variable(1)]], problem.cursor, schema, problem.preds),
+#     Rule([["Person",Variable(1)],["pred3a",Variable(1),Constant("const3a")]], self.cursor, self.schema, self.preds),
+#     # Rule([["Author",Variable(1)],["pred1a",Variable(1),Variable(2)],["pred1b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds),
+#     Rule([["Author",Variable(1)],["pred2a",Variable(1)]], problem.cursor, schema, problem.preds),
+#     # Rule([["Author",Variable(1)],["pred3a",Variable(1),Constant("const3a")]], self.cursor, self.schema, self.preds),
+# ]
+
+true_mapping = supervision.cmt_mapping
+for predicate in true_mapping:
+    print("Predicate: ", predicate)
+    query = true_mapping[predicate]
+
+    # todo arity 2
+    rules = []        
+    rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred1a", Variable(1)]], problem.cursor, schema, problem.preds))
+    rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1)]], problem.cursor, schema, problem.preds))
+    rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred3a", Variable(1)]], problem.cursor, schema, problem.preds))
+    rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred4a", Variable(1)]], problem.cursor, schema, problem.preds))
+    rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred5a", Variable(1)]], problem.cursor, schema, problem.preds))
+    # rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], problem.cursor, schema, problem.preds))
+
+    models = []
+
+    supervision = util.create_supervision(problem.cursor, schema, predicate, query, 100, problem.constants)
+    mapping_stats = {}
+    t0 = time.time()
+    print("Collecting support...")
+    for s, ispositive in supervision:
+        # print("Fact", s)
+        mappings_list = []
+        for r in rules:
+            mappings = r.get_support(s)
+            mappings_list.append(mappings)
+            for m in mappings:
+                for aux in m:
+                    pred = m[aux][0]
+                    predname = "_".join(pred)
+                    if predname not in mapping_stats:
+                        mapping_stats[predname] = {True:0, False:0}
+                    mapping_stats[predname][ispositive] += 1
+        models.append(train.MappingLayer(mappings_list, emap, fact=s, positive=ispositive))
+    t1 = time.time()
+    print("Collecting support took {} sec.".format(t1 - t0))
+    print(mapping_stats)
+
+    print("Training...")
+    train.train(models, epochs=10, emap=emap, batch_size=64, lr=0.001, Tmin=0.01)
+    print("Avg eval loss: ", train.eval(models))
+    t2 = time.time()
+    print("Training took {} sec.".format(t2 - t1))
+
+
+xxx
+
 problem.add_query_dir(query_dir)
 
 success = 0

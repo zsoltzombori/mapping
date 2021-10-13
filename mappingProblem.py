@@ -23,8 +23,8 @@ class MappingProblem:
         }
 
         self.cursor = util.init_db()
-        util.inspect_database(self.cursor)
-        util.inspect_schema(self.cursor, self.schema)
+        # util.inspect_database(self.cursor)
+        # util.inspect_schema(self.cursor, self.schema)
         self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
 
         self.db_attributes = util.attributes(self.cursor, self.schema)
@@ -33,75 +33,60 @@ class MappingProblem:
 
         self.types = util.db_types(self.db_attributes)
         # print("types: ", self.types)            
-        self.constants = util.schema_constants(self.cursor, self.schema)
+        self.constants = util.schema_constants(self.cursor, self.schema, allowed_types=("integer",))
         # print("constants: ", len(self.constants))
         self.classes = self.get_classes()
         # print(self.classes)
         self.properties = self.get_properties()
         # print(self.properties)
 
-        self.rules = [            
-            Rule([["Author",Variable(1)],["pred1a",Variable(1),Variable(2)],["pred1b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds),
-            Rule([["Author",Variable(1)],["pred2a",Variable(1)]], self.cursor, self.schema, self.preds),
-            Rule([["Author",Variable(1)],["pred3a",Variable(1),Constant("const3a")]], self.cursor, self.schema, self.preds),
-        ]
+        # xxx
+
+        # self.rules = [            
+        #     Rule([["Author",Variable(1)],["pred1a",Variable(1),Variable(2)],["pred1b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds),
+        #     Rule([["Author",Variable(1)],["pred2a",Variable(1)]], self.cursor, self.schema, self.preds),
+        #     Rule([["Author",Variable(1)],["pred3a",Variable(1),Constant("const3a")]], self.cursor, self.schema, self.preds),
+        # ]
+
+        # self.supervision = [
+        #     (["Author", 179], True),
+        #     (["Author", 1089], True),
+        #     (["Author", 316], True),
+        #     (["Author", 2], False),
+        #     (["Author", 4], False),
+        #     (["Author", 6], False),           
+        # ]
+
+        # self.emap = train.EmbeddingMap(32)
+        # self.mappingFactory = train.MappingFactory(self.emap)
+        # self.models = []
+
+        # t0 = time.time()
+        # print("Collecting support...")
+        # for s, ispositive in self.supervision:
+        #     mappings_list = []
+        #     for r in self.rules:
+        #         mappings = r.get_support(s)
+        #         # mappings = mappings[-2:]
+        #         mappings_list.append(mappings)
+
+        #         print("Fact ({}): {}".format(ispositive, s))
+        #         # for ms in mappings_list:
+        #         #     for m in ms:
+        #         #         print(" Mapping: ", m)
+        #     self.models.append(train.MappingLayer(mappings_list, self.emap, positive=ispositive))
+        #     # self.models.append(self.mappingFactory.create(mappings_list))
+        # t1 = time.time()
+        # print("Collecting support took {} sec.".format(t1 - t0))
+
+        # print("Training...")
+        # train.train(self.models, iters=100, emap=self.emap, batch_size=3)
+        # t2 = time.time()
+        # print("Training took {} sec.".format(t2 - t1))
+
+        # xxx
             
-        self.positives = [
-            ["Author", 179],
-            ["Author", 1089],
-            ["Author", 316],
-        ]
 
-        self.negatives = [
-            ["Author", 1],
-            ["Author", 2],
-            ["Author", 3],
-        ]
-
-        self.emap = train.EmbeddingMap(4)
-        self.mappingFactory = train.MappingFactory(self.emap)
-        self.models = []
-
-        t0 = time.time()
-        print("Collecting support...")
-        for p in self.positives:
-            mappings_list = []
-            for r in self.rules:
-                mappings = r.get_support(p)
-                mappings_list.append(mappings)
-            # self.models.append(train.MappingLayer(mappings_list, self.emap))
-            self.models.append(self.mappingFactory.create(mappings_list))
-        t1 = time.time()
-        print("Collecting support took {} sec.".format(t1 - t0))
-
-        print("Training...")
-        train.train(self.models, 10, self.emap, 1.0)
-        t2 = time.time()
-        print("Training took {} sec.".format(t2 - t1))
-        
-            
-
-
-            # total_matches = 0
-            # i = 0
-            # # for c0 in self.constants:
-            # for c0 in [
-            #         ["head", 179],
-            #         ["head", 1089],
-            #         ["head", 316],
-            # ]: 
-            #     print("fact: ", c0)
-            #     i += 1
-            #     mappings = rule3.get_support(c0)
-            #     print("{} support size for {}: {}".format(i, c0, len(mappings)))
-            #     total_matches += len(mappings)
-
-            #     for m in mappings:
-            #         print(m)
-
-
-            # print("average matches: {}".format(total_matches / len(self.constants)))
-            # xxx
 
     # def add_rules(self, rules):
     #     self.rules += rules

@@ -4,73 +4,48 @@ from functools import partial
 import time
 import numpy as np
 
-tf.random.set_seed(20)
+tf.random.set_seed(13230)
 
-class EmbeddingMap:
-    def __init__(self, dim):
-        self.dim = dim
-        self.emb_dict = {}
-
-    def create_embedding(self):
-        return tf.Variable(tf.random.normal((self.dim, )))
-        
-    def embedding(self, name, entity_type):
-        if entity_type not in self.emb_dict:
-            self.emb_dict[entity_type] = {}
-            
-        d = self.emb_dict[entity_type]
-        if name in d:
-            return d[name]
-        else:
-            v = self.create_embedding()
-            d[name] = v
-            return v
-
-    def print(self):
-        print("Embeddings:")
-        for k in sorted(self.emb_dict.keys()):
-            d = self.emb_dict[k]
-            print("   {}   ".format(k))
-            for n in d:
-                print("\t{}\t{}".format(n, d[n].value()))
-
-    def find_closest(self, type1, type2):
-        if type1 not in self.emb_dict or type2 not in self.emb_dict:
-            return
-
-        d1 = self.emb_dict[type1]
-        d2 = self.emb_dict[type2]
-        for n1 in d1:
-            emb1 = d1[n1]
-            closest = None
-            closest_score = -100000
-            for n2 in d2:
-                emb2 = d2[n2]
-                curr_score = similarity(emb1, emb2)
-                if curr_score > closest_score:
-                    closest_score = curr_score
-                    closest = n2
-            print("{} is closest to {}".format(n1, closest))
                             
 
-mappings1 = [
-    {'a1': (('Paper', 'paperID', 'TYPE'), (179, 1)), 'b1': (('Person', 'is_Reviewer', 'TYPE'), (False, 1))},
-    {'a1': (('Person', 'ID', 'is_Author'), (179, True)), 'b1': (('Person', 'is_user', 'is_Reviewer'), (True, True))},
-]
+class EuclideanMetric:
+    def __init__(self):
+        pass
 
-mappings2 = [
-    {'a2': (('Paper', 'hasAuthor'), (179,))},
-    {'a2': (('Paper', 'paperID'), (179,))},
-    {'a2': (('Person', 'ID'), (179,))},
-]
+    def dist(self, emb1, emb2):
+        return tf.sqrt(tf.reduce_sum(tf.square(emb1 - emb2)) / emb1.shape[0])
+
+    def score(self, emb1, emb2): # a value between 0 and 1
+        d = self.dist(emb1, emb2)
+        return tf.exp(-d)
+
+    def dist2loss(self, dist, positive):
+        if positive:
+            return dist
+        else:
+            return - dist
 
 
-cosineSimilarity = keras.losses.CosineSimilarity()
+class CosineMetric:
+    def __init__(self):
+        self.cosineSimilarity = keras.losses.CosineSimilarity()
 
-# @tf.function
-def similarity(emb1, emb2):
-    # return -tf.sqrt(tf.reduce_sum(tf.square(emb1 - emb2)) / emb1.shape[0])
-    return tf.abs(cosineSimilarity(emb1, emb2))
+    def score(self, emb1, emb2):
+        return tf.abs(self.cosineSimilarity(emb1, emb2))
+
+    def dist(self, emb1, emb2):
+        s = self.score(emb1, emb2)
+        return 1 - s
+
+    def dist2loss(self, dist, positive):
+        if positive:
+            return dist
+        else:
+            return 1 - dist
+
+myMetric = EuclideanMetric()
+
+    
 
 def mapping2score(mapping, emap):
     score = tf.constant(1.0)
@@ -81,19 +56,19 @@ def mapping2score(mapping, emap):
             emb_aux = emap.embedding(aux, "aconst")
             emb_source = emap.embedding(values[0], "sconst")
             # vars.append(emb_source)
-            score *= similarity(emb_aux, emb_source)
+            score *= myMetric.score(emb_aux, emb_source)
         elif len(pred) == 2: # unary predicate
             emb_aux = emap.embedding(aux, "apred")
             pred_name = "{}_{}".format(pred[0], pred[1])
             emb_pred = emap.embedding(pred_name, "spred")
             # vars.append(emb_pred)
-            score *= similarity(emb_aux, emb_pred)
+            score *= myMetric.score(emb_aux, emb_pred)
         elif len(pred) == 3: # binary predicate
             emb_aux = emap.embedding(aux, "apred")
             pred_name = "{}_{}_{}".format(pred[0], pred[1], pred[2])
             emb_pred = emap.embedding(pred_name, "spred")
             # vars.append(emb_pred)
-            score *= similarity(emb_aux, emb_pred)
+            score *= myMetric.score(emb_aux, emb_pred)
         vars.append(emb_aux)
     return score, vars
 
@@ -175,17 +150,21 @@ class MappingLayer(keras.layers.Layer):
 
         self.emb_aux_list = []
         self.emb_source_list = []
+        self.slack_variables_list = []
         for mappings in mappings_list:
             if len(mappings) > 0:
-                curr_emb_aux_list, curr_emb_source_list = self.process_mappings(mappings)
+                curr_emb_aux_list, curr_emb_source_list, slack_variables_list = self.process_mappings(mappings)
                 self.emb_aux_list.append(curr_emb_aux_list)
                 self.emb_source_list.append(curr_emb_source_list)
+                self.slack_variables_list.append(slack_variables_list)
+        assert len(self.emb_source_list) > 0, "TODO"
 
     def process_mappings(self, mappings):
         assert len(mappings) > 0
         aux_names = mappings[0].keys()        
         emb_aux_list = []
         emb_source_list = [[] for _ in range(len(aux_names))]
+        slack_variables_list = [[] for _ in range(len(aux_names))]
         first_row = True
         for m in mappings:
             for i, aux_name in enumerate(aux_names):
@@ -205,51 +184,47 @@ class MappingLayer(keras.layers.Layer):
                     emb_aux = self.emap.embedding(aux_name, atype)
                     emb_aux_list.append(emb_aux)
                 emb_source_list[i].append(emb_source)
-        return emb_aux_list, emb_source_list
+                slack_variables_list[i].append(tf.Variable(tf.random.uniform([], minval=0, maxval=1)))
+        return emb_aux_list, emb_source_list, slack_variables_list
 
 
     def call(self, Temp):
-        scores_per_rule1 = []
-        scores_per_rule2 = []
+        distances_per_rule = []
         variables = []
-        source_loss = tf.constant(0.0)
-        for curr_emb_aux_list, curr_emb_source_list in zip(self.emb_aux_list, self.emb_source_list):
+        all_slack_variables = []
+        slack_loss = tf.constant(0.0)
+        for curr_emb_aux_list, curr_emb_source_list, curr_slack_variables_list in zip(self.emb_aux_list, self.emb_source_list, self.slack_variables_list):
             variables += curr_emb_aux_list
-            scores_per_pred = []
-            for emb_aux, emb_source in zip(curr_emb_aux_list, curr_emb_source_list):
-                for i, emb1 in enumerate(emb_source):
-                    variables.append(emb1)
-                    for j, emb2 in enumerate(emb_source):
-                        if j > i:
-                            variables.append(emb2)
-                            source_loss += similarity(emb1, emb2)
-                # variables += emb_source
-                partial_similarity = partial(similarity, emb2 = emb_aux)
-                scores = tf.map_fn(partial_similarity, tf.convert_to_tensor(emb_source), fn_output_signature=tf.float32)
-                scores_per_pred.append(scores)
-            score_per_pred = tf.reduce_prod(scores_per_pred, axis=0)
+            distances_per_pred = []
+            for emb_aux, emb_source, slack_variables in zip(curr_emb_aux_list, curr_emb_source_list, curr_slack_variables_list):
+                all_slack_variables += slack_variables
+                distances = []
+                slack_point = tf.constant(0.0)
+                slack_sum = tf.constant(0.0)
+                for emb2, slack in zip(emb_source, slack_variables):
+                    slack_loss += tf.maximum(1.0, slack) - 1 - tf.minimum(0.0, slack)
+                    slack_point += slack * emb2
+                    slack_sum += slack
+                    distances.append(myMetric.dist(emb_aux, emb2))
+                if self.positive:
+                    slack_loss += tf.square(slack_sum - 1.0)
+                    distances_per_pred.append(myMetric.dist(emb_aux, slack_point))
+                else:
+                    distances_per_pred.append(distances)
+            if not self.positive:
+                distances_per_pred = tf.reduce_mean(distances_per_pred, axis=0)
+            
             # score_per_rule1 = tf.reduce_sum(tf.square(score_per_pred) * softmax(score_per_pred, Temp))
-            score_per_rule1 = tf.reduce_max(score_per_pred)
-            score_per_rule2 = tf.reduce_max(score_per_pred)
-            scores_per_rule1.append(score_per_rule1)
-            scores_per_rule2.append(score_per_rule2)
-        if len(scores_per_rule1) == 0:
-            score1 = tf.constant(0.0)
-        else:
-            score1 = tf.reduce_max(scores_per_rule1)
-        if len(scores_per_rule2) == 0:
-            score2 = tf.constant(0.0)
-        else:
-            score2 = tf.reduce_max(scores_per_rule2)
-        
+            distance_per_rule = tf.reduce_max(distances_per_pred)
+            distances_per_rule.append(distance_per_rule)
+
+        distance = tf.reduce_min(distances_per_rule)
+        loss1 = myMetric.dist2loss(distance, self.positive)
         if self.positive:
-            loss1 = 1-score1
-            loss2 = 1-score2
+            loss2 = slack_loss
+            variables += slack_variables
         else:
-            loss1 = score1
-            loss2 = score2
-        loss1 = tf.pow(loss1, 10)
-        loss1 += source_loss
+            loss2 = tf.constant(0.0)
         return loss1, loss2, variables
 
 
@@ -268,14 +243,11 @@ class MappingLayer(keras.layers.Layer):
         else:
             loss = score
 
-        print(self.fact, self.positive, " loss: ", loss)
+        # print(self.fact, self.positive, " loss: ", loss)
         return loss
         
 
-def train(models, epochs, emap, batch_size=32, Tmax=10.0, Tmin=0.01, lr=0.001):
-    print("Datapoints: ", len(models))
-    assert len(models) > batch_size, "Batch size ({}) should be smaller than number of datapoints ({})".format(batch_size, len(models))
-
+def train(generator, epochs, Tmax=10.0, Tmin=0.01, lr=0.001):
     # Temp is going to be an exponentially diminishing curve that fits to Tmax and Tmin
     # Temp = alpha * exp(-beta * (epoch+1))
     beta = np.log(Tmax / Tmin) / (epochs-1)
@@ -286,29 +258,54 @@ def train(models, epochs, emap, batch_size=32, Tmax=10.0, Tmin=0.01, lr=0.001):
     t0 = time.time()    
     for epoch in range(epochs):
         T = alpha * np.exp(-beta * (epoch+1))
-        indices = np.random.permutation(len(models))
-        epoch_loss1 = 0
-        epoch_loss2 = 0
-        batch_grads = []
-        batch_vars = []
-        for i in range(len(models)):
-            index = indices[i]
-            m = models[index]
+
+        aux_list, pos_list, neg_list = generator.__getitem__(32)
+        batch_loss = 0
+        for aux, pos, neg in zip(aux_list, pos_list, neg_list):
+            vars = [aux] + pos + neg
             with tf.GradientTape() as g:
-                loss1, loss2, vars = m(T)
-                epoch_loss1 += loss1.numpy()
-                epoch_loss2 += loss2.numpy()
-            grads = g.gradient(loss1, vars)
-            batch_grads += grads
-            batch_vars += vars
-            if (i+1) % batch_size == 0:
-                optimizer.apply_gradients(zip(batch_grads, batch_vars))
-                batch_grads = []
-                batch_vars = []
-        t1 = time.time()
-        print("Epoch {}, loss {}-{}, temp {}, time {} sec".format(epoch, epoch_loss1 / len(models), epoch_loss2 / len(models), T, t1-t0))
-        emap.find_closest("aconst","sconst")
-        emap.find_closest("apred", "spred")
+                loss = tf.constant(0.0)
+                pos_dist = []
+                neg_dist = []
+                for p in pos:
+                    pos_dist.append(myMetric.dist(p, aux))
+                for n in neg:
+                    neg_dist.append(myMetric.dist(n, aux))
+                pos_loss = tf.reduce_min(pos_dist)
+                neg_loss = - tf.reduce_min(neg_dist)
+                loss = pos_loss + neg_loss
+                batch_loss += loss.numpy()
+            grads=g.gradient(loss, [aux])
+            optimizer.apply_gradients(zip(grads, vars))
+        print("{} Batch loss: {}".format(epoch, batch_loss / generator.batch_size))
+        generator.emap.find_closest("aux","source", myMetric.score)
+        
+        # indices = np.random.permutation(len(models))
+        # epoch_loss1 = 0
+        # epoch_loss2 = 0
+        # batch_grads = []
+        # batch_vars = []
+        # for i in range(len(models)):
+        #     index = indices[i]
+        #     m = models[index]
+        #     with tf.GradientTape() as g:
+        #         loss1, loss2, vars = m(T)
+        #         epoch_loss1 += loss1.numpy()
+        #         epoch_loss2 += loss2.numpy()
+        #         loss = loss1 + loss2
+        #     grads = g.gradient(loss, vars)
+        #     batch_grads += grads
+        #     batch_vars += vars
+        #     if (i+1) % batch_size == 0:
+        #         optimizer.apply_gradients(zip(batch_grads, batch_vars))
+        #         batch_grads = []
+        #         batch_vars = []
+        # t1 = time.time()
+        # epoch_loss1 /= len(models)
+        # epoch_loss2 /= len(models)
+        # print("Epoch {}, loss {} ({}+{}), temp {}, time {} sec".format(epoch, epoch_loss1 + epoch_loss2, epoch_loss1, epoch_loss2, T, t1-t0))
+        # emap.find_closest("aconst","sconst")
+        # emap.find_closest("apred", "spred")
 
 def eval(models):
     loss = 0

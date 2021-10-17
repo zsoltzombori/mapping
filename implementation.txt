@@ -1,4 +1,17 @@
 ####################
+2021.10.14
+
+collect positive and negative samples for each auxiliary symbol Apred
+
+positive sample: Apred -> (Spred1,...Spredk) in mapping of positive fact
+negative sample: Apred -> (Spred.....      ) in mapping of negative fact
+
+take a positive-negative pair
+     push away from all negatives
+     push towards closest closest remaining positive
+
+
+####################
 2021.10.06
 
 

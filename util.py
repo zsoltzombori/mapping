@@ -212,4 +212,5 @@ def create_supervision(cursor, schema, predicate, query, size, constants):
         supervision.append((negative, False))
     return supervision
 
-
+def pred2name(pred):
+    return "|".join(pred)

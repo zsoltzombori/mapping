@@ -1,6 +1,7 @@
 import rdflib
 import psycopg2
 import time
+import tensorflow as tf
 
 import util
 import mappingProblem
@@ -18,13 +19,22 @@ schema = "cmt_renamed"
 
 ontology = "RODI/data/{}/ontology.ttl".format(schema)
 query_dir = "RODI/data/{}/queries".format(schema)
-
-problem = mappingProblem.MappingProblem(schema, ontology)
-# emap = train.EmbeddingMap(32)
-
-generator = data.MyGenerator(dim=32, batch_size=32)
-
 true_mapping = supervision.cmt_mapping
+datapath = "outdata/{}".format(schema)
+
+problem = mappingProblem.MappingProblem(schema, ontology, true_mapping)
+
+size = problem.generate_data(samplesize=1000, path=datapath)
+print("Generated {} datapoints".format(size))
+
+# element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
+# d = tf.data.experimental.load(datapath, element_spec=element_spec)
+
+xxx
+
+
+generator = data.MyGenerator(dim=32, batch_size=1024)
+
 for predicate in true_mapping:
     print("Predicate: ", predicate)
     query = true_mapping[predicate]
@@ -45,9 +55,16 @@ for predicate in true_mapping:
     t0 = time.time()
     print("Collecting support...")
     for s, ispositive in supervision:
+        d_input = ["SOS"] + s + ["EOP","EOS"]
+        d_input = [str(x) for x in d_input]
+        d_input = " ".join(d_input)
         mappings_list = []
         for r in rules:
-            mappings = r.get_support(s)
+            mappings, targets = r.get_support(s)
+            for t in targets:
+                d_output = [str(x) for x in t]
+                d_output = " ".join(d_output)
+                dataset_elements.append([d_input, d_output, str(ispositive)])
             if len(mappings) == 0:
                 continue
             generator.add_mappings(mappings, ispositive)
@@ -55,24 +72,26 @@ for predicate in true_mapping:
             for m in mappings:
                 for aux in m:
                     pred = m[aux][0]
-                    predname = "_".join(pred)
+                    predname = util.pred2name(pred)
                     if predname not in mapping_stats:
                         mapping_stats[predname] = {True:0, False:0}
                     mapping_stats[predname][ispositive] += 1
         if len(mappings_list) == 0:
             continue
-        # models.append(train.MappingLayer(mappings_list, emap, fact=s, positive=ispositive))
+
+    # models.append(train.MappingLayer(mappings_list, emap, fact=s, positive=ispositive))
     t1 = time.time()
     print("Collecting support took {} sec.".format(t1 - t0))
     print(mapping_stats)
 
-    print("Training...")
-    train.train(generator, epochs=100, lr=0.01, Tmin=0.01)
-    xxx
-    print("Avg eval loss: ", train.eval(models))
-    t2 = time.time()
-    print("Training took {} sec.".format(t2 - t1))
+    # print("Training...")
+    # train.train(generator, epochs=100, lr=0.01, Tmin=0.01)
+    # xxx
+    # print("Avg eval loss: ", train.eval(models))
+    # t2 = time.time()
+    # print("Training took {} sec.".format(t2 - t1))
 
+dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
 
 xxx
 

@@ -4,7 +4,9 @@ from functools import partial
 import time
 import numpy as np
 
-tf.random.set_seed(13230)
+import data
+
+tf.random.set_seed(13)
 
                             
 
@@ -247,23 +249,29 @@ class MappingLayer(keras.layers.Layer):
         return loss
         
 
-def train(generator, epochs, Tmax=10.0, Tmin=0.01, lr=0.001):
+def train(generator, epochs, Tmax=10.0, Tmin=0.01, lr=0.001, neg_coeff = 1.0, reg_coeff = 0.0):
     # Temp is going to be an exponentially diminishing curve that fits to Tmax and Tmin
     # Temp = alpha * exp(-beta * (epoch+1))
     beta = np.log(Tmax / Tmin) / (epochs-1)
     alpha = Tmax / np.exp(-beta)
 
-    # optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+    optimizer = tf.keras.optimizers.SGD(learning_rate=lr, momentum=0.9)
+    # optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
     t0 = time.time()    
     for epoch in range(epochs):
         T = alpha * np.exp(-beta * (epoch+1))
 
-        aux_list, pos_list, neg_list = generator.__getitem__(32)
+        emb1 = generator.emap.embedding("Author_pred1a", "aux")
+        emb2 = generator.emap.embedding("authors_id", "source")
+
+        aux_list, pos_list, neg_list = generator.get_all()
+        reg_embeddings = generator.get_embedding_sample(size=32)
         batch_loss = 0
         for aux, pos, neg in zip(aux_list, pos_list, neg_list):
-            vars = [aux] + pos + neg
+            vars = [aux] + pos + neg + reg_embeddings
             with tf.GradientTape() as g:
+                reg_dist = data.squared_distance(tf.convert_to_tensor(reg_embeddings))
+                reg_loss = -tf.reduce_sum(reg_dist)
                 loss = tf.constant(0.0)
                 pos_dist = []
                 neg_dist = []
@@ -273,7 +281,8 @@ def train(generator, epochs, Tmax=10.0, Tmin=0.01, lr=0.001):
                     neg_dist.append(myMetric.dist(n, aux))
                 pos_loss = tf.reduce_min(pos_dist)
                 neg_loss = - tf.reduce_min(neg_dist)
-                loss = pos_loss + neg_loss
+                loss = pos_loss + neg_coeff * neg_loss + reg_coeff * reg_loss
+                loss1 = loss + tf.reduce_sum(tf.square(emb1-emb2))
                 batch_loss += loss.numpy()
             grads=g.gradient(loss, [aux])
             optimizer.apply_gradients(zip(grads, vars))

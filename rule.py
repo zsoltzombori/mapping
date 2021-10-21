@@ -1,6 +1,8 @@
 import datetime
 import decimal
 
+import util
+
 class Variable:
     def __init__(self, number):
         self.n = number
@@ -23,17 +25,21 @@ class Rule:
     # return all the mappings that yield a proof of fact
     def get_support(self, fact):
         if len(fact) != len(self.head):
-            return []
+            return [], []
         if fact[0] != self.head[0]:
-            return []
+            return [], []
 
         subst = {}
+        target = ["SOS", self.head[0]]
         for h_arg, f_arg in zip(self.head[1:], fact[1:]):
             if isinstance(h_arg, Variable):
                 subst[h_arg.n] = f_arg
+                target.append("var_{}".format(h_arg.n))
             elif h_arg != f_arg:
-                return []
-        return self.candidate_mappings(self.body, subst, {})
+                return [], []
+        target.append("EOH")
+        
+        return self.candidate_mappings(self.body, subst, {}, target)
         
 
 
@@ -89,17 +95,19 @@ class Rule:
 
         return matches
 
-    def candidate_mappings(self, body, subst, mapping):
+    def candidate_mappings(self, body, subst, mapping, target):
 
         if len(body) == 0:
-            return [mapping]
+            return [mapping], [target + ["EOS"]]
         
         body_subst = [apply_subst(b, subst) for b in body]
         # TODO select the one with the least amount of variables
         B = body_subst[0][1]
+        B2 = body[0]
         body2 = body[1:]
 
-        result = []
+        mappings_out = []
+        targets_out = []
 
         # collect all facts that unify with B
         # have the same arity as B and has the same constant in the same position
@@ -111,6 +119,18 @@ class Rule:
             #     Mapping2 is Mapping + {pred(B) -> pred(F)}
             mapping2 = mapping.copy()
             mapping2[f[0]] = (f[1], f[2])
+
+            if False: # TODO
+                args = list(f[2])
+            else:
+                args = []
+                for a, v in zip(B2[1:], f[2]):
+                    if isinstance(a, Variable):
+                        args.append("var_{}".format(a.n))
+                    elif isinstance(a, Constant):
+                        args.append(v)
+
+            target2 = target + [util.pred2name(f[1])] + args + ["EOP"]
 
             #     Subs2 is Subst + mgu(Subst(B), F)
             subst2 = subst.copy() # shallow copy is fine here, I think
@@ -126,9 +146,10 @@ class Rule:
                         mapping2[arg.n] = (("const",), (value,))
 
             if constants_match:
-                new_mappings = self.candidate_mappings(body2, subst2, mapping2)
-                result += new_mappings
-        return result
+                new_mappings, new_targets = self.candidate_mappings(body2, subst2, mapping2, target2)
+                mappings_out += new_mappings
+                targets_out += new_targets
+        return mappings_out, targets_out
 
    
    #     score = embeddingScore(Mapping2)

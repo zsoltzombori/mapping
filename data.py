@@ -49,6 +49,12 @@ class EmbeddingMap:
                     closest = n2
             print("{} is closest to {}".format(n1, closest))
 
+def squared_distance(A):
+    r = tf.reduce_sum(A*A, 1)
+    # turn r into column vector
+    r = tf.reshape(r, [-1, 1])
+    D = r - 2*tf.matmul(A, tf.transpose(A)) + tf.transpose(r)
+    return D
 
 class MyGenerator(keras.utils.Sequence):
 
@@ -93,7 +99,7 @@ class MyGenerator(keras.utils.Sequence):
                 result[aux].append(source)
         return result
 
-    def __getitem__(self, index):
+    def get_batch(self):
         aux_set = set(self.positive_mappings.keys()).union(set(self.negative_mappings.keys()))
 
         aux_list = []
@@ -120,5 +126,44 @@ class MyGenerator(keras.utils.Sequence):
             aux_list.append(self.emap.embedding(aux, "aux"))
 
         return aux_list, positives_list, negatives_list
+
+    def get_all(self):
+        aux_set = set(self.positive_mappings.keys()).union(set(self.negative_mappings.keys()))
+
+        aux_list = []
+        positives_list = []
+        negatives_list = []
+
+        for aux in list(aux_set):
+            if aux not in self.positive_mappings:
+                positives_l = [[]]
+            else:
+                positives_l = self.positive_mappings[aux]
+            if aux not in self.negative_mappings:
+                negatives_l = [[]]
+            else:
+                negatives_l = self.negative_mappings[aux]
+
+            for positives0 in positives_l:
+                for negatives0 in negatives_l:
+                    
+                    positives = list(set(positives0) - set(negatives0)) # TODO RECONSIDER
+                    negatives = negatives0
+
+                    positives = [self.emap.embedding(p, "source") for p in positives]
+                    negatives = [self.emap.embedding(n, "source") for n in negatives]
+                    positives_list.append(positives)
+                    negatives_list.append(negatives)
+                    aux_list.append(self.emap.embedding(aux, "aux"))
+        return aux_list, positives_list, negatives_list
+
+
+    # random sample of embeddings
+    def get_embedding_sample(self, size, embtype="source"):
+        d = self.emap.emb_dict[embtype]
+        keys = list(d.keys())
+        if len(keys) > size:
+            keys = random.sample(keys, size)
+        return [d[k] for k in keys]
 
         

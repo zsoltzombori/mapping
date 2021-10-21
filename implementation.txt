@@ -1,3 +1,35 @@
+2021.10.19
+
+The mapping problem can be seen as a translation task (sequence to sequence)
+
+Input: ground head of a rule
+Output: ground body of a rule
+
+Ex:
+{C,a,stop} -> {R1,a,b,and,R2,b,23,stop}
+
+"stop" indicates end of intput/output
+"and" indicates that a new predicate is coming
+
+1. Take a bunch of rule templates
+2. For each template and each supervision fact, generate a lot of ground (head, body) pairs
+3. Train a transformer to predict body from head
+3. For evaluation sample a fixed K number of bodies
+   A positive supervision fact passes the test if some body is true in the source
+   A negative supervision fact passes the test if none of the sampled bodies are true in the source
+4. Potentially extract rules by lifting generated ground rules
+
+There will be a tradeoff between positive and negative successes based on K
+   Large K makes it easier for a positive to pass
+   Smaller K makes it easier for a negative to pass
+An ROC curve can show this well
+   plot true positive rate (true positives / positives) against false positive rate (false positive / negatives)
+
+
+Input: list of tokens
+Output: list of tokens
+Embed them to integers, so we get list of integers
+
 ####################
 2021.10.14
 

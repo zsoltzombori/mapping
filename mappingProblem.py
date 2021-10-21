@@ -7,12 +7,13 @@ import time
 import util
 import query
 from rule import Rule, Variable, Constant
-import train
+import tensorflow as tf
 
 class MappingProblem:
-    def __init__(self, schema, ontology):
+    def __init__(self, schema, ontology, true_mapping):
         self.schema = schema
         self.ontology = ontology
+        self.true_mapping = true_mapping
         self.graph = rdflib.Graph()
         self.graph.parse(ontology)
         self.queries = []
@@ -40,57 +41,34 @@ class MappingProblem:
         self.properties = self.get_properties()
         # print(self.properties)
 
-        # xxx
+        self.rules = []
+        for predicate in self.true_mapping:
+            self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred1a", Variable(1)]], self.cursor, schema, self.preds))
+            # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], self.cursor, schema, self.preds))
+            #TODO arity 2
 
-        # self.rules = [            
-        #     Rule([["Author",Variable(1)],["pred1a",Variable(1),Variable(2)],["pred1b",Variable(3),Variable(2)]], self.cursor, self.schema, self.preds),
-        #     Rule([["Author",Variable(1)],["pred2a",Variable(1)]], self.cursor, self.schema, self.preds),
-        #     Rule([["Author",Variable(1)],["pred3a",Variable(1),Constant("const3a")]], self.cursor, self.schema, self.preds),
-        # ]
+    def generate_data(self, samplesize, path):
+        dataset_elements = []
+        for predicate in self.true_mapping:
+            query = self.true_mapping[predicate]
+            supervision = util.create_supervision(self.cursor, self.schema, predicate, query, samplesize//2, self.constants)
+            for s, ispositive in supervision:
+                d_input = ["SOS"] + s + ["EOP","EOS"]
+                d_input = [str(x) for x in d_input]
+                d_input = " ".join(d_input)
+                for r in self.rules:
+                    mappings, targets = r.get_support(s)
+                    for t in targets:
+                        d_output = [str(x) for x in t]
+                        d_output = " ".join(d_output)
+                        dataset_elements.append((d_input, d_output, str(ispositive)))
+                        
+        dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
+        print("Dataset element spec: ", dataset.element_spec)
+        tf.data.experimental.save(dataset, path)
+        return len(dataset_elements)
 
-        # self.supervision = [
-        #     (["Author", 179], True),
-        #     (["Author", 1089], True),
-        #     (["Author", 316], True),
-        #     (["Author", 2], False),
-        #     (["Author", 4], False),
-        #     (["Author", 6], False),           
-        # ]
-
-        # self.emap = train.EmbeddingMap(32)
-        # self.mappingFactory = train.MappingFactory(self.emap)
-        # self.models = []
-
-        # t0 = time.time()
-        # print("Collecting support...")
-        # for s, ispositive in self.supervision:
-        #     mappings_list = []
-        #     for r in self.rules:
-        #         mappings = r.get_support(s)
-        #         # mappings = mappings[-2:]
-        #         mappings_list.append(mappings)
-
-        #         print("Fact ({}): {}".format(ispositive, s))
-        #         # for ms in mappings_list:
-        #         #     for m in ms:
-        #         #         print(" Mapping: ", m)
-        #     self.models.append(train.MappingLayer(mappings_list, self.emap, positive=ispositive))
-        #     # self.models.append(self.mappingFactory.create(mappings_list))
-        # t1 = time.time()
-        # print("Collecting support took {} sec.".format(t1 - t0))
-
-        # print("Training...")
-        # train.train(self.models, iters=100, emap=self.emap, batch_size=3)
-        # t2 = time.time()
-        # print("Training took {} sec.".format(t2 - t1))
-
-        # xxx
             
-
-
-    # def add_rules(self, rules):
-    #     self.rules += rules
-
 
     def add_query_dir(self, query_dir):
         for filename in os.listdir(query_dir):

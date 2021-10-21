@@ -2,7 +2,7 @@
 # should be relavant for all cmt scenarios
 
 cmt_mapping = {
-    # "Person": "select id from persons;",
+#     "Person": "select id from persons;",
     "Author": "select id from authors;",
     # "Co-author": "select id from co_authors;",
     # "Conference": "select id from conferences;",

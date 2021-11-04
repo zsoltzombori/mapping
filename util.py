@@ -191,7 +191,7 @@ def db2preds(cursor, schema):
                 binaries.append((r1, r2))
     return {"unary": unaries, "binary": binaries}
 
-def create_supervision(cursor, schema, predicate, query, size, constants):
+def create_supervision(cursor, predicate, query, size, constants):
     cursor.execute(query)
     result = cursor.fetchall()
     result = list(set(result))

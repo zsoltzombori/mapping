@@ -11,8 +11,8 @@ from rule import Rule, Variable, Constant
 import train
 import data
 
-schema = "cmt_renamed"
-#schema = "cmt_structured"
+#schema = "cmt_renamed"
+schema = "cmt_structured"
 #schema = "conference_structured"
 #schema = "conference_renamed"
 #schema = "npd_user_tests"
@@ -20,9 +20,10 @@ schema = "cmt_renamed"
 ontology = "RODI/data/{}/ontology.ttl".format(schema)
 query_dir = "RODI/data/{}/queries".format(schema)
 true_mapping = supervision.cmt_mapping
+true_schema = supervision.cmt_schema
 datapath = "outdata/{}".format(schema)
 
-problem = mappingProblem.MappingProblem(schema, ontology, true_mapping)
+problem = mappingProblem.MappingProblem(schema, ontology, true_mapping, true_schema)
 
 size = problem.generate_data(samplesize=1000, path=datapath)
 print("Generated {} datapoints".format(size))

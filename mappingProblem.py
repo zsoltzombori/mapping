@@ -10,10 +10,11 @@ from rule import Rule, Variable, Constant
 import tensorflow as tf
 
 class MappingProblem:
-    def __init__(self, schema, ontology, true_mapping):
+    def __init__(self, schema, ontology, true_mapping, true_schema):
         self.schema = schema
         self.ontology = ontology
         self.true_mapping = true_mapping
+        self.true_schema = true_schema
         self.graph = rdflib.Graph()
         self.graph.parse(ontology)
         self.queries = []
@@ -28,6 +29,9 @@ class MappingProblem:
         # util.inspect_schema(self.cursor, self.schema)
         self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
 
+        self.true_cursor = util.init_db()
+        self.true_cursor.execute("SET search_path TO {}, public;".format(self.true_schema))
+        
         self.db_attributes = util.attributes(self.cursor, self.schema)
         self.db_tables = self.db_attributes.keys()
         self.preds = util.db2preds(self.cursor, self.schema)
@@ -43,19 +47,18 @@ class MappingProblem:
 
         self.rules = []
         for predicate in self.true_mapping:
-            self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred1a", Variable(1)]], self.cursor, schema, self.preds))
-            # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], self.cursor, schema, self.preds))
+            # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred1a", Variable(1)]], self.cursor, schema, self.preds))
+            self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], self.cursor, schema, self.preds))
             #TODO arity 2
 
     def generate_data(self, samplesize, path):
-        dataset_elements = []
         for predicate in self.true_mapping:
+            dataset_elements = []
             mapping_dict = {True:[], False:[]}
             query = self.true_mapping[predicate]
-            supervision = util.create_supervision(self.cursor, self.schema, predicate, query, samplesize//2, self.constants)
+            supervision = util.create_supervision(self.true_cursor, predicate, query, samplesize//2, self.constants)
             for s, ispositive in supervision:
-                # d_input = ["SOS"] + s + ["EOP","EOS"]
-                d_input = ["SOS"] + s[:1] + ["EOP","EOS"] # TODO
+                d_input = ["SOS"] + s[:1] + ["EOP","EOS"]
                 d_input = [str(x) for x in d_input]
                 d_input = " ".join(d_input)
                 for r in self.rules:
@@ -68,10 +71,11 @@ class MappingProblem:
             print("Mapping statistics for predicate ", predicate)
             util.visualise_mapping_dict(mapping_dict)
 
-        dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
-        print("Dataset element spec: ", dataset.element_spec)
-        tf.data.experimental.save(dataset, path)
-        return len(dataset_elements)
+            curr_path = "{}/{}".format(path,predicate)
+            dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
+            # print("Dataset element spec: ", dataset.element_spec)
+            tf.data.experimental.save(dataset, curr_path)
+
 
             
 

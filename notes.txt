@@ -1,0 +1,19 @@
+This formula has created a default database cluster with:
+  initdb --locale=C -E UTF-8 /opt/homebrew/var/postgres
+For more details, read:
+  https://www.postgresql.org/docs/13/app-initdb.html
+
+To start postgresql:
+  brew services start postgresql
+Or, if you don't want/need a background service you can just run:
+  /opt/homebrew/opt/postgresql/bin/postgres -D /opt/homebrew/var/postgres
+
+log into the default database
+on my laptop:  psql -p 5432 -U zsoori -d test
+on my desktop: ~/postgres/bin/psql -p 5433 -U zsoori -d test
+
+restore a database
+psql -U zsoori -d test -p 5432 -f ~/mapping/RODI/data/cmt_structured/dump.sql
+
+\du: users of the database
+

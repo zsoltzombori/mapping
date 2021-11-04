@@ -1,6 +1,8 @@
 # mappings in the cmt_renamed scenario
 # should be relavant for all cmt scenarios
 
+cmt_schema = "cmt_renamed"
+
 cmt_mapping = {
     "Person": "select id from persons;",
     "Author": "select id from authors;",

@@ -199,18 +199,49 @@ def create_supervision(cursor, schema, predicate, query, size, constants):
     arity = len(result[0])
     supervision = []
 
-    for i in range(size):
-        if i >= len(result):
-            break
-        positive = [predicate] + list(result[i])
+    pos_size = min(size, len(result))    
+    pos_samples = result[:pos_size]
+
+    neg_samples = []
+    for i in range(pos_size):
         while True:
-            tup = random.sample(constants, arity)
-            if tuple(tup) not in result:
-                negative = [predicate] + tup
+            tup = tuple(random.sample(constants, arity))
+            if (tup not in result) and (tup not in neg_samples):
+                neg_samples.append(tup)
                 break
-        supervision.append((positive, True))
-        supervision.append((negative, False))
+
+    pos_supervision = [([predicate] + list(tup), True) for tup in pos_samples]
+    neg_supervision = [([predicate] + list(tup), False) for tup in neg_samples]
+    supervision = pos_supervision + neg_supervision
+    
+    # for i in range(size):
+    #     if i >= len(result):
+    #         break
+    #     positive = [predicate] + list(result[i])
+    #     while True:
+    #         tup = random.sample(constants, arity)
+    #         if tuple(tup) not in result:
+    #             negative = [predicate] + tup
+    #             break
+    #     supervision.append((positive, True))
+    #     supervision.append((negative, False))
     return supervision
 
 def pred2name(pred):
     return "|".join(pred)
+
+def visualise_mapping_dict(mapping_dict):
+    pred_dict = {}
+    for isPositive in (True, False):
+        mappings = mapping_dict[isPositive]
+        for m in mappings:
+            for pred in m:
+                pname = pred2name(m[pred][0])
+                if pname not in pred_dict:
+                    pred_dict[pname] = {True:0, False:0}
+                pred_dict[pname][isPositive] += 1
+    print("\nPredicates in the mappings:")
+    for p in pred_dict:
+        print("   {}: {}".format(p, pred_dict[p]))
+    print("")
+          

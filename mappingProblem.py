@@ -50,19 +50,24 @@ class MappingProblem:
     def generate_data(self, samplesize, path):
         dataset_elements = []
         for predicate in self.true_mapping:
+            mapping_dict = {True:[], False:[]}
             query = self.true_mapping[predicate]
             supervision = util.create_supervision(self.cursor, self.schema, predicate, query, samplesize//2, self.constants)
             for s, ispositive in supervision:
-                d_input = ["SOS"] + s + ["EOP","EOS"]
+                # d_input = ["SOS"] + s + ["EOP","EOS"]
+                d_input = ["SOS"] + s[:1] + ["EOP","EOS"] # TODO
                 d_input = [str(x) for x in d_input]
                 d_input = " ".join(d_input)
                 for r in self.rules:
                     mappings, targets = r.get_support(s)
+                    mapping_dict[ispositive] += mappings
                     for t in targets:
                         d_output = [str(x) for x in t]
                         d_output = " ".join(d_output)
                         dataset_elements.append((d_input, d_output, str(ispositive)))
-                        
+            print("Mapping statistics for predicate ", predicate)
+            util.visualise_mapping_dict(mapping_dict)
+
         dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
         print("Dataset element spec: ", dataset.element_spec)
         tf.data.experimental.save(dataset, path)

@@ -25,7 +25,7 @@ datapath = "outdata/{}".format(schema)
 
 problem = mappingProblem.MappingProblem(schema, ontology, true_mapping, true_schema)
 
-size = problem.generate_data(samplesize=1000, path=datapath)
+size = problem.generate_data(samplesize=10, path=datapath)
 print("Generated {} datapoints".format(size))
 
 # element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)

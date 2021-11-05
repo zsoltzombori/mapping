@@ -34,7 +34,7 @@ class MappingProblem:
         
         self.db_attributes = util.attributes(self.cursor, self.schema)
         self.db_tables = self.db_attributes.keys()
-        self.preds = util.db2preds(self.cursor, self.schema)
+        self.preds = util.db2preds(self.cursor, self.schema, allowed_types=None) # ("integer", "boolean", "date"))
 
         self.types = util.db_types(self.db_attributes)
         # print("types: ", self.types)            
@@ -48,7 +48,9 @@ class MappingProblem:
         self.rules = []
         for predicate in self.true_mapping:
             # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred1a", Variable(1)]], self.cursor, schema, self.preds))
-            self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], self.cursor, schema, self.preds))
+            # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], self.cursor, schema, self.preds))
+
+            self.rules.append(Rule([[predicate, Variable(1), Variable(2)], [predicate+"_pred2a", Variable(1), Variable(2)]], self.cursor, schema, self.preds))
             #TODO arity 2
 
     def generate_data(self, samplesize, path):
@@ -67,6 +69,7 @@ class MappingProblem:
                     for t in targets:
                         d_output = [str(x) for x in t]
                         d_output = " ".join(d_output)
+                        print(d_output)
                         dataset_elements.append((d_input, d_output, str(ispositive)))
             print("Mapping statistics for predicate ", predicate)
             util.visualise_mapping_dict(mapping_dict)

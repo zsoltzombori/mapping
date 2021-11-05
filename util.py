@@ -179,14 +179,18 @@ def groupby_max(rows, max_index):
     
 
 # collect all table/column pairs and table/column1/column2 triples
-def db2preds(cursor, schema):
+def db2preds(cursor, schema, allowed_types=None):
     cursor.execute("select table_name, column_name, data_type from information_schema.columns where table_schema=%s", (schema,))
     unaries = []
     binaries = []
     result = cursor.fetchall()
     for r1 in result:
+        if allowed_types is not None and r1[2] not in allowed_types:
+            continue
         unaries.append(r1)
         for r2 in result:
+            if allowed_types is not None and r2[2] not in allowed_types:
+                continue
             if r1[0] == r2[0] and r1[1] != r2[1]:
                 binaries.append((r1, r2))
     return {"unary": unaries, "binary": binaries}

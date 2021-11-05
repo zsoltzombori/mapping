@@ -9,6 +9,8 @@ import string
 import sys
 import time
 
+os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -30,7 +32,7 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 BUFFER_SIZE = 200000
-BATCH_SIZE = 128
+BATCH_SIZE = 1024
 VOCAB_SIZE_IN = 1000
 VOCAB_SIZE_OUT = 200000
 MAX_SEQUENCE_LENGTH_IN = 20
@@ -39,7 +41,7 @@ NEG_WEIGHT=1.0
 NEG_CLIP=1.0
 ENT_WEIGHT=0.0
 
-EPOCHS = 200
+EPOCHS = 30
 
 num_layers = 4
 d_model = 128
@@ -48,11 +50,17 @@ num_heads = 8
 dropout_rate = 0.1
 CLIP_NORM = 0.1
 
+predicate="Author" # success
+predicate="Co-author"
+predicate="Reviewer"
+predicate="PaperFullVersion"
+predicate="PaperAbstract"
+
 ##########################################
 
 element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
 # examples = tf.data.experimental.load("outdata/cmt_renamed", element_spec=element_spec)
-examples = tf.data.experimental.load("outdata/cmt_structured/Author", element_spec=element_spec)
+examples = tf.data.experimental.load("outdata/cmt_structured/{}".format(predicate), element_spec=element_spec)
 df_size = tf.data.experimental.cardinality(examples).numpy()
 
 print("Dataset size: ", df_size)
@@ -70,13 +78,15 @@ test_examples = test_examples.take(test_size)
 
 
 int_vectorize_layer_in = TextVectorization(
-    max_tokens=VOCAB_SIZE_IN,
-    output_mode='int',
-    output_sequence_length=MAX_SEQUENCE_LENGTH_IN)
+  max_tokens=VOCAB_SIZE_IN,
+  output_mode='int',
+  standardize=None,
+  output_sequence_length=MAX_SEQUENCE_LENGTH_IN)
 int_vectorize_layer_out = TextVectorization(
-    max_tokens=VOCAB_SIZE_OUT,
-    output_mode='int',
-    output_sequence_length=MAX_SEQUENCE_LENGTH_OUT)
+  max_tokens=VOCAB_SIZE_OUT,
+  output_mode='int',
+  standardize=None,
+  output_sequence_length=MAX_SEQUENCE_LENGTH_OUT)
 
 train_text_in = train_examples.map(lambda x: x[0])
 train_text_out = train_examples.map(lambda x: x[1])
@@ -454,7 +464,7 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 # learning_rate = CustomSchedule(d_model)
 
-initial_learning_rate = 0.0001
+initial_learning_rate = 0.001
 learning_rate = tf.keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate,
     decay_steps=10,
@@ -480,8 +490,8 @@ def entropy_loss(pred):
 
 
 def loss_function(real, pred, ispositive):
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
   loss_ = loss_object(real, pred)
+  mask = tf.math.logical_not(tf.math.equal(real, 0))
   mask = tf.cast(mask, dtype=loss_.dtype)
   loss_ *= mask
   ent_loss_ = entropy_loss(pred)
@@ -497,6 +507,43 @@ def loss_function(real, pred, ispositive):
   pos_loss = tf.reduce_mean(pos_loss)
   neg_loss = tf.reduce_mean(neg_loss)
   return pos_loss, neg_loss, loss
+
+def my_gather(x):
+  return tf.gather(x[0], x[1])
+
+def my_gather_list(x):
+  return tf.map_fn(my_gather, x, fn_output_signature=tf.float32)
+
+loss_object2 = tf.keras.losses.BinaryCrossentropy(
+    from_logits=True, reduction='none')
+
+def funny_loss_function(real, pred, ispositive):
+  mask = tf.math.logical_not(tf.math.equal(real, 0))
+
+  # binary crossentropy on the target logit
+  target_logits = tf.map_fn(my_gather_list, (pred, real), fn_output_signature=tf.TensorSpec(shape=[None], dtype=tf.float32))
+  target_logits = tf.expand_dims(target_logits, -1)
+  loss_ = loss_object2(tf.ones_like(target_logits), target_logits)
+
+  loss_ += loss_object(real, pred)
+
+  # small force pulling all logits to the opposite direction
+  reg_loss_ = tf.reduce_mean(pred, axis=-1)
+  # loss_ = loss_ + 0.001 * reg_loss_
+  
+  mask = tf.cast(mask, dtype=loss_.dtype)
+  loss_ *= mask
+
+  loss = tf.reduce_sum(loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+  pos_loss = ispositive * loss
+  neg_loss = tf.maximum(-NEG_CLIP, (ispositive - 1) * loss)
+  loss = pos_loss + NEG_WEIGHT * neg_loss
+  loss = tf.reduce_mean(loss)
+  pos_loss = tf.reduce_mean(pos_loss)
+  neg_loss = tf.reduce_mean(neg_loss)
+  return pos_loss, neg_loss, loss
+
+
 
 
 def accuracy_function(real, pred, ispositive):
@@ -563,7 +610,7 @@ def train_step(inp, tar, ispositive):
   with tf.GradientTape() as tape:
     predictions, _ = transformer([inp, tar_inp],
                                  training = True)
-    pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
+    pos_loss, neg_loss, loss = funny_loss_function(tar_real, predictions, ispositive)
 
   gradients = tape.gradient(loss, transformer.trainable_variables)
   gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
@@ -606,6 +653,14 @@ class Translator(tf.Module):
     self.transformer = transformer
     self.vocab_out = self.tokenizer_out.get_vocabulary()
 
+    # as the target is english, the first token to the transformer should be the
+    # english start token.
+    # start_end = self.tokenizers.en.tokenize([''])[0]
+    start_end = self.tokenizer_out(['SOS EOS'])[0]
+    self.start = start_end[0][tf.newaxis]
+    self.end = start_end[1][tf.newaxis]
+    
+
   def __call__(self, sentence, max_length=20, deterministic=False):
     # input sentence is portuguese, hence adding the start and end token
     assert isinstance(sentence, tf.Tensor)
@@ -613,20 +668,12 @@ class Translator(tf.Module):
       sentence = sentence[tf.newaxis]
 
     sentence = self.tokenizer_in(sentence)
-
     encoder_input = sentence
-
-    # as the target is english, the first token to the transformer should be the
-    # english start token.
-    # start_end = self.tokenizers.en.tokenize([''])[0]
-    start_end = self.tokenizer_out(['SOS EOS'])[0]
-    start = start_end[0][tf.newaxis]
-    end = start_end[1][tf.newaxis]
 
     # `tf.TensorArray` is required here (instead of a python list) so that the
     # dynamic-loop can be traced by `tf.function`.
     output_array = tf.TensorArray(dtype=tf.int64, size=0, dynamic_size=True)
-    output_array = output_array.write(0, start)
+    output_array = output_array.write(0, self.start)
 
     probs = []
 
@@ -654,7 +701,7 @@ class Translator(tf.Module):
       # as its input.
       output_array = output_array.write(i+1, predicted_id[0])
 
-      if predicted_id == end:
+      if predicted_id == self.end:
         break
 
     output = tf.transpose(output_array.stack())
@@ -672,6 +719,7 @@ class Translator(tf.Module):
     # _, attention_weights = self.transformer([encoder_input, output[:,:-1]], training=False)
 
     return tokens, probs
+
 
 translator = Translator(int_vectorize_layer_in, int_vectorize_layer_out, transformer)
 
@@ -709,7 +757,8 @@ for e in train_examples:
 
     print("---------")
     print(f'{"Input:":15s}: {sentence.numpy()}')
-    for i in range(100):
+    outputs = []
+    for i in range(10):
       if i==0:
         deterministic=True
       else:
@@ -717,7 +766,10 @@ for e in train_examples:
       pred_tokens, probs = translator(tf.constant(sentence), deterministic=deterministic)
       prob = np.prod(probs)
       text = tf.strings.reduce_join(pred_tokens, separator=' ').numpy()
-      print(f'{prob:.5f}: {text}')
+      outputs.append((prob, text))
+    outputs = sorted(outputs, reverse=True)
+    for (prob, text) in outputs:
+      print(f'{prob:.10f}: {text}')
 
 # xxx
     

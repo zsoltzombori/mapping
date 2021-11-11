@@ -5,6 +5,8 @@ from nltk.translate.bleu_score import sentence_bleu
 import numpy as np
 import pandas as pd
 import random
+import datetime
+import decimal
 
 # parse db configurations from file
 def config(filename='database.ini', section='postgresql'):
@@ -81,7 +83,7 @@ def schema_constants(cursor, schema, allowed_types=None):
     s = "select table_name, column_name, data_type from information_schema.columns where table_schema='{}'".format(schema)
     cursor.execute(s)
     result = cursor.fetchall()
-    constants = []
+    constants = {}
     for r in result:
         table = r[0]
         column = r[1]
@@ -93,8 +95,13 @@ def schema_constants(cursor, schema, allowed_types=None):
         result2 = cursor.fetchall()
         result2 = [r[0] for r in result2]
         result2 = list(set(result2))
-        constants += result2
-    constants = list(set(constants))
+
+        if dtype not in constants:
+            constants[dtype] = []
+        
+        constants[dtype] += result2
+    for dtype in constants:
+        constants[dtype] = list(set(constants[dtype]))
     return constants
 
 def sparql_result_to_list(qres, colname):
@@ -181,55 +188,84 @@ def groupby_max(rows, max_index):
 # collect all table/column pairs and table/column1/column2 triples
 def db2preds(cursor, schema, allowed_types=None):
     cursor.execute("select table_name, column_name, data_type from information_schema.columns where table_schema=%s", (schema,))
-    unaries = []
-    binaries = []
+    unaries = {}
+    binaries = {}
     result = cursor.fetchall()
     for r1 in result:
-        if allowed_types is not None and r1[2] not in allowed_types:
+        table1 = r1[0]
+        column1 = r1[1]
+        dtype1 = r1[2]
+        if allowed_types is not None and dtype1 not in allowed_types:
             continue
-        unaries.append(r1)
+        if dtype1 not in unaries:
+            unaries[dtype1] = []
+        unaries[dtype1].append(r1)
+        
         for r2 in result:
-            if allowed_types is not None and r2[2] not in allowed_types:
+            table2 = r2[0]
+            column2 = r2[1]
+            dtype2 = r2[2]
+            if allowed_types is not None and dtype2 not in allowed_types:
                 continue
-            if r1[0] == r2[0] and r1[1] != r2[1]:
-                binaries.append((r1, r2))
+            if table1 == table2 and column1 != column2:
+                if (dtype1,dtype2) not in binaries:
+                    binaries[(dtype1, dtype2)] = []                
+                binaries[(dtype1, dtype2)].append((r1, r2))
     return {"unary": unaries, "binary": binaries}
 
-def create_supervision(cursor, predicate, query, size, constants):
+def create_supervision(cursor, predicate, query, constants, rules, pos_size):
+
+    # first collect positive facts and all their proofs
     cursor.execute(query)
     result = cursor.fetchall()
     result = list(set(result))
-    assert len(result) > 0
+    pos_size = min(pos_size, len(result))
+    pos_tuples = result[:pos_size]
+    pos_mappings = []
+    pos_targets = []
+    for pt in pos_tuples: # collect proofs for each fact
+        for r in rules:
+            pos_mappings_curr, pos_targets_curr = r.get_support([predicate] + list(pt))
+            pos_targets += pos_targets_curr
+            pos_mappings += pos_mappings_curr
+
+    # create matching number of negative proofs
+    pos_targets_size = len(pos_targets)
+    assert pos_targets_size > 0
+
     arity = len(result[0])
-    supervision = []
+    sql_types = constants.keys()
+    supervision_types = [get_matching_types(r, sql_types) for r in result[0]]
 
-    pos_size = min(size, len(result))    
-    pos_samples = result[:pos_size]
+    neg_mappings = []
+    neg_targets = []
+    neg_tuples = []
+    attempts = 10000
+    while (len(neg_targets) < pos_targets_size) and attempts > 0:
+        attempts -= 1
+        # generate a random tuple of matching type
+        nt = []
+        for types in supervision_types:
+            t = random.choice(types)
+            nt.append(random.choice(constants[t]))
+        nt = tuple(nt)
+        if nt in result:
+            continue
+        if nt in neg_tuples:
+            continue
+        else:
+            # collect proofs for each negative fact
+            neg_tuples.append(nt)
+            for r in rules:
+                neg_mappings_curr, neg_targets_curr = r.get_support([predicate] + list(nt))
+                neg_targets += neg_targets_curr
+                neg_mappings += neg_mappings_curr
 
-    neg_samples = []
-    for i in range(pos_size):
-        while True:
-            tup = tuple(random.sample(constants, arity))
-            if (tup not in result) and (tup not in neg_samples):
-                neg_samples.append(tup)
-                break
+    neg_mappings = neg_mappings[:pos_targets_size]
+    neg_targets = neg_targets[:pos_targets_size]
 
-    pos_supervision = [([predicate] + list(tup), True) for tup in pos_samples]
-    neg_supervision = [([predicate] + list(tup), False) for tup in neg_samples]
-    supervision = pos_supervision + neg_supervision
-    
-    # for i in range(size):
-    #     if i >= len(result):
-    #         break
-    #     positive = [predicate] + list(result[i])
-    #     while True:
-    #         tup = random.sample(constants, arity)
-    #         if tuple(tup) not in result:
-    #             negative = [predicate] + tup
-    #             break
-    #     supervision.append((positive, True))
-    #     supervision.append((negative, False))
-    return supervision
+    print("Proofs generated for predicate {}: {} positives, {} negatives".format(predicate, len(pos_targets), len(neg_targets)))
+    return pos_mappings, pos_targets, neg_mappings, neg_targets
 
 def pred2name(pred):
     return "|".join(pred)
@@ -248,4 +284,38 @@ def visualise_mapping_dict(mapping_dict):
     for p in pred_dict:
         print("   {}: {}".format(p, pred_dict[p]))
     print("")
-          
+
+
+def type_match(sql_type, obj):
+    if sql_type == "NULL":
+        result = obj is None
+    elif sql_type == "boolean":
+        result = isinstance(obj, bool)
+    elif sql_type in ("real", "double"):
+        result = isinstance(obj, float)
+    elif sql_type in ("smallint", "integer", "bigint"):
+        result = isinstance(obj, int) and not isinstance(obj, bool)
+    elif sql_type == "numeric":
+        result = isinstance(obj, decimal.Decimal)
+    elif sql_type in ("varchar", "text", "character varying", "character"):
+        result = isinstance(obj, str)
+    elif sql_type == "date":
+        result = isinstance(obj, datetime.date)
+    elif sql_type in ("time", "timetz"):
+        result = isinstance(obj, datetime.time)
+    elif sql_type in ("datetime", "datetimetz"):
+        result = isinstance(obj, datetime.datetime)
+    elif sql_type == "interval":
+        result = isinstance(obj, datetime.timedelta)
+    elif sql_type == "ARRAY":
+        result = isinstance(obj, list)
+    else:
+        result = True
+    return result
+
+def get_matching_types(x, sql_types):
+    result = []
+    for sql_type in sql_types:
+        if type_match(sql_type, x):
+            result.append(sql_type)
+    return result

@@ -34,11 +34,11 @@ class MappingProblem:
         
         self.db_attributes = util.attributes(self.cursor, self.schema)
         self.db_tables = self.db_attributes.keys()
-        self.preds = util.db2preds(self.cursor, self.schema, allowed_types=None) # ("integer", "boolean", "date"))
+        self.preds = util.db2preds(self.cursor, self.schema, allowed_types=None)
 
         self.types = util.db_types(self.db_attributes)
         # print("types: ", self.types)            
-        self.constants = util.schema_constants(self.cursor, self.schema, allowed_types=("integer",))
+        self.constants = util.schema_constants(self.cursor, self.schema, allowed_types=None)
         # print("constants: ", len(self.constants))
         self.classes = self.get_classes()
         # print(self.classes)
@@ -46,38 +46,50 @@ class MappingProblem:
         # print(self.properties)
 
         self.rules = []
-        for predicate in self.true_mapping:
-            # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred1a", Variable(1)]], self.cursor, schema, self.preds))
-            # self.rules.append(Rule([[predicate, Variable(1)], [predicate+"_pred2a", Variable(1), Constant(predicate+"_const2a")]], self.cursor, schema, self.preds))
+        for p in self.true_mapping:
+            self.rules.append(Rule([[p, Variable(1)], [p+"_pred1a", Variable(1)]], self.cursor, self.preds))
+            self.rules.append(Rule([[p, Variable(1)], [p+"_pred2a", Variable(1), Constant(p+"_const2a")]], self.cursor, self.preds))
 
-            self.rules.append(Rule([[predicate, Variable(1), Variable(2)], [predicate+"_pred2a", Variable(1), Variable(2)]], self.cursor, schema, self.preds))
-            #TODO arity 2
+            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred3a", Variable(1), Variable(2)]], self.cursor, self.preds))
+            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred4a", Variable(1), Variable(2)], [p+"_pred4b", Variable(1)]], self.cursor, self.preds))
+            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred5a", Variable(1), Variable(2)], [p+"_pred5b", Variable(2)]], self.cursor, self.preds))
+            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred6a", Variable(1), Variable(2)], [p+"_pred6b", Variable(1)], [p+"_pred6c", Variable(2)]], self.cursor, self.preds))
+            # self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
 
     def generate_data(self, samplesize, path):
+        all_dataset_elements = []
         for predicate in self.true_mapping:
             dataset_elements = []
             mapping_dict = {True:[], False:[]}
             query = self.true_mapping[predicate]
-            supervision = util.create_supervision(self.true_cursor, predicate, query, samplesize//2, self.constants)
-            for s, ispositive in supervision:
-                d_input = ["SOS"] + s[:1] + ["EOP","EOS"]
-                d_input = [str(x) for x in d_input]
-                d_input = " ".join(d_input)
-                for r in self.rules:
-                    mappings, targets = r.get_support(s)
-                    mapping_dict[ispositive] += mappings
-                    for t in targets:
-                        d_output = [str(x) for x in t]
-                        d_output = " ".join(d_output)
-                        print(d_output)
-                        dataset_elements.append((d_input, d_output, str(ispositive)))
-            print("Mapping statistics for predicate ", predicate)
-            util.visualise_mapping_dict(mapping_dict)
+            pos_mappings, pos_targets, neg_mappings, neg_targets = util.create_supervision(self.true_cursor, predicate, query, self.constants, self.rules, samplesize)
 
+            print("Mapping statistics for predicate ", predicate)
+            util.visualise_mapping_dict({True:pos_mappings, False:neg_mappings})
+
+            d_input = ["SOS"] + [str(predicate)] + ["EOP","EOS"]
+            d_input = " ".join(d_input)
+
+            for t in pos_targets:
+                d_output = [str(x) for x in t]
+                d_output = " ".join(d_output)
+                # print(d_output)
+                dataset_elements.append((d_input, d_output, str(True)))
+
+            for t in neg_targets:
+                d_output = [str(x) for x in t]
+                d_output = " ".join(d_output)
+                # print(d_output)
+                dataset_elements.append((d_input, d_output, str(False)))
+                
             curr_path = "{}/{}".format(path,predicate)
             dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
-            # print("Dataset element spec: ", dataset.element_spec)
             tf.data.experimental.save(dataset, curr_path)
+            all_dataset_elements += dataset_elements
+
+        curr_path = "{}/all".format(path)
+        dataset = tf.data.Dataset.from_tensor_slices(all_dataset_elements)
+        tf.data.experimental.save(dataset, curr_path)
 
 
             

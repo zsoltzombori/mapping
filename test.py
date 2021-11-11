@@ -11,7 +11,7 @@ from rule import Rule, Variable, Constant
 import train
 import data
 
-#schema = "cmt_renamed"
+schema = "cmt_renamed"
 schema = "cmt_structured"
 #schema = "conference_structured"
 #schema = "conference_renamed"
@@ -25,13 +25,13 @@ datapath = "outdata/{}".format(schema)
 
 problem = mappingProblem.MappingProblem(schema, ontology, true_mapping, true_schema)
 
-size = problem.generate_data(samplesize=10, path=datapath)
+size = problem.generate_data(samplesize=300, path=datapath)
 print("Generated {} datapoints".format(size))
 
 # element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
 # d = tf.data.experimental.load(datapath, element_spec=element_spec)
 
-xxx
+END
 
 
 generator = data.MyGenerator(dim=32, batch_size=1024)

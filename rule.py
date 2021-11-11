@@ -15,11 +15,10 @@ class Constant:
 # the first element is the predicate
 # subsequent elements are constants or Variables 
 class Rule:
-    def __init__(self, spec, cursor, schema, preds):
+    def __init__(self, spec, cursor, preds):
         self.head = spec[0]
         self.body = spec[1:]
         self.cursor = cursor
-        self.schema = schema
         self.preds = preds
 
     # return all the mappings that yield a proof of fact
@@ -58,12 +57,17 @@ class Rule:
         else:
             assert False, "Only unary/binary predicates are supported"
 
+        temp = []
+        for t in targets:
+            temp += targets[t]
+        targets = temp
+
         matches = []
         if unary:
             for t in targets:
                 table0, column0, type0 = t
                 sql = "SELECT DISTINCT \"{}\" from \"{}\" where \"{}\"=%s".format(column0, table0, column0)
-                if type_match(type0, args[0]):
+                if util.type_match(type0, args[0]):
                     self.cursor.execute(sql, (args[0],))
                     result = self.cursor.fetchall()
                     for r in result:
@@ -77,14 +81,14 @@ class Rule:
 
                 result = None
                 if isinstance(args[0], (Variable, Constant)):
-                    if type_match(type1, args[1]):
+                    if util.type_match(type1, args[1]):
                         self.cursor.execute(sql + " where \"{}\"=%s".format(column1),  (args[1],))
                         result = self.cursor.fetchall()
                 elif isinstance(args[1], (Variable, Constant)):
-                    if type_match(type0, args[0]):
+                    if util.type_match(type0, args[0]):
                         self.cursor.execute(sql + " where \"{}\"=%s".format(column0),  (args[0],))
                         result = self.cursor.fetchall()
-                elif type_match(type0, args[0]) and type_match(type1, args[1]):
+                elif util.type_match(type0, args[0]) and util.type_match(type1, args[1]):
                     self.cursor.execute(sql + " where \"{}\"=%s and \"{}\"=%s".format(column0, column1),  (args[0], args[1]))
                     result = self.cursor.fetchall()
 
@@ -171,29 +175,3 @@ def apply_subst(atom, subst):
         args2.append(a2)
     return varcnt, atom[:1] + args2
 
-def type_match(sql_type, obj):
-    if sql_type == "NULL":
-        result = obj is None
-    elif sql_type == "boolean":
-        result = isinstance(obj, bool)
-    elif sql_type in ("real", "double"):
-        result = isinstance(obj, float)
-    elif sql_type in ("smallint", "integer", "bigint"):
-        result = isinstance(obj, int) and not isinstance(obj, bool)
-    elif sql_type == "numeric":
-        result = isinstance(obj, decimal.Decimal)
-    elif sql_type in ("varchar", "text", "character varying", "character"):
-        result = isinstance(obj, str)
-    elif sql_type == "date":
-        result = isinstance(obj, datetime.date)
-    elif sql_type in ("time", "timetz"):
-        result = isinstance(obj, datetime.time)
-    elif sql_type in ("datetime", "datetimetz"):
-        result = isinstance(obj, datetime.datetime)
-    elif sql_type == "interval":
-        result = isinstance(obj, datetime.timedelta)
-    elif sql_type == "ARRAY":
-        result = isinstance(obj, list)
-    else:
-        result = True
-    return result

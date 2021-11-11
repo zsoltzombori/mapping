@@ -9,6 +9,7 @@ import string
 import sys
 import time
 import copy
+import itertools
 
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
 
@@ -32,8 +33,13 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
-BUFFER_SIZE = 200000
+EPOCHS = 5
 BATCH_SIZE = 256
+BEAMSIZE=30
+MAX_EVAL_LENGTH = 30
+
+
+BUFFER_SIZE = 200000
 VOCAB_SIZE_IN = 1000
 VOCAB_SIZE_OUT = 200000
 MAX_SEQUENCE_LENGTH_IN = 20
@@ -41,8 +47,6 @@ MAX_SEQUENCE_LENGTH_OUT = 20
 NEG_WEIGHT=1.0
 NEG_CLIP=1.0
 ENT_WEIGHT=0.0
-
-EPOCHS = 40
 
 num_layers = 4
 d_model = 128
@@ -791,13 +795,45 @@ class Translator(tf.Module):
       prob = t[0]
       output_array = t[1]
       output = tf.convert_to_tensor([output_array])
-      tokens = tf.gather(self.vocab_out, output)  
-      text = tf.strings.reduce_join(tokens, separator=' ').numpy()
-      result.append((prob, tokens))
+      tokens = tf.gather(self.vocab_out, output)
+      tokens = tokens[0].numpy()
+      tokens = [t.decode('UTF-8') for t in tokens]
+      rule, isvalid = parse_rule(tokens)
+      if isvalid:
+        # text = tf.strings.reduce_join(tokens[0], separator=' ').numpy()
+        result.append((prob, rule))
 
     return result
 
 translator = Translator(int_vectorize_layer_in, int_vectorize_layer_out, transformer)
+
+
+def parse_rule(tokens):
+  if tokens[0] != 'SOS':
+    return -1, False
+  if tokens[-1] != 'EOS':
+    return -1, False
+  tokens = tokens[1:-1]
+
+  eoh_count = tokens.count('EOH')
+  if eoh_count != 1:
+    return -1, False
+  
+  eoh = tokens.index('EOH')
+  head = tokens[:eoh]
+  body = tokens[eoh+1:]
+  atoms = [list(y) for x, y in itertools.groupby(body, lambda z: z == 'EOP') if not x]
+
+  atoms.append(head)
+  formatted_atoms = []
+  for a in atoms:
+    if len(head) > 3 or len(head) < 2:
+      return -1, False
+    a2 = "{}({})".format(a[0], ",".join(a[1:]))
+    formatted_atoms.append(a2)
+
+  rule = "{} -> {}".format(", ".join(formatted_atoms[:-1]), formatted_atoms[-1])  
+  return rule, True
 
 
 def print_translation(sentence, pred_tokens, ground_truth, ispositive):
@@ -847,6 +883,8 @@ def eval(examples, iterations=10):
     for (prob, text) in outputs:
       print(f'{prob:.10f}: {text}')
 
+
+
 def eval_beamsearch(examples, beamsize=20, max_length=20):
   inputs = []
   for e in examples:
@@ -863,7 +901,7 @@ def eval_beamsearch(examples, beamsize=20, max_length=20):
       print(f'{prob:.10f}: {text}')
 
 print("\n\nTRAIN")
-eval_beamsearch(train_examples, beamsize=30, max_length=30)
+eval_beamsearch(train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH)
 # eval(train_examples)
       
 # xxx

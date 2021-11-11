@@ -1,3 +1,27 @@
+####################
+2021.11.11
+
+cmt_renamed is mostly aligned
+
+problems where there are very few datapoints
+ProgramCommitteeChair: the same fact has many proofs with the same prefix but different (existential) variable in the body, making the prefix much more probable than it should
+
+Conferences
+ProgramCommittee
+
+Filter results with a rule parser
+train together
+- synthetic
+- real data
+
+How to balance datapoints of different size when training together?
+
+date mapping failed completely. Why?
+label mapping failed completely. Why?
+siteURL mapping failed completely. Why?
+
+
+####################
 2021.10.19
 
 The mapping problem can be seen as a translation task (sequence to sequence)

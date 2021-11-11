@@ -8,6 +8,7 @@ import re
 import string
 import sys
 import time
+import copy
 
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
 
@@ -32,7 +33,7 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 BUFFER_SIZE = 200000
-BATCH_SIZE = 1024
+BATCH_SIZE = 256
 VOCAB_SIZE_IN = 1000
 VOCAB_SIZE_OUT = 200000
 MAX_SEQUENCE_LENGTH_IN = 20
@@ -41,7 +42,7 @@ NEG_WEIGHT=1.0
 NEG_CLIP=1.0
 ENT_WEIGHT=0.0
 
-EPOCHS = 30
+EPOCHS = 40
 
 num_layers = 4
 d_model = 128
@@ -50,57 +51,61 @@ num_heads = 8
 dropout_rate = 0.1
 CLIP_NORM = 0.1
 
-predicate="Author" # success
-predicate="Co-author"
-predicate="Reviewer"
-predicate="PaperFullVersion"
-predicate="PaperAbstract"
+
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--datadir', type=str, required=True)
+args = parser.parse_args()
+
+datadir = args.datadir
+
+# predicate="Author" # success
+# predicate="Co-author"
+# predicate="Reviewer"
+# predicate="PaperFullVersion"
+# predicate="PaperAbstract"
+# predicate="all"
+# datadir = "outdata/cmt_structured/{}".format(predicate)
 
 ##########################################
 
-element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
-# examples = tf.data.experimental.load("outdata/cmt_renamed", element_spec=element_spec)
-examples = tf.data.experimental.load("outdata/cmt_structured/{}".format(predicate), element_spec=element_spec)
-df_size = tf.data.experimental.cardinality(examples).numpy()
+def load_data(datadir):
+  element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
+  examples = tf.data.experimental.load(datadir, element_spec=element_spec)
+  df_size = tf.data.experimental.cardinality(examples).numpy()
+  print("Dataset size: ", df_size)
 
-print("Dataset size: ", df_size)
+  train_size = int(0.7 * df_size)
+  val_size = int(0.15 * df_size)
+  test_size = int(0.15 * df_size)
+  
+  examples = examples.shuffle(BUFFER_SIZE)
+  train_examples = examples.take(train_size)
+  test_examples = examples.skip(train_size)
+  val_examples = test_examples.skip(val_size)
+  test_examples = test_examples.take(test_size)
 
-train_size = int(0.7 * df_size)
-val_size = int(0.15 * df_size)
-test_size = int(0.15 * df_size)
+  int_vectorize_layer_in = TextVectorization(
+    max_tokens=VOCAB_SIZE_IN,
+    output_mode='int',
+    standardize=None,
+    output_sequence_length=MAX_SEQUENCE_LENGTH_IN)
+  int_vectorize_layer_out = TextVectorization(
+    max_tokens=VOCAB_SIZE_OUT,
+    output_mode='int',
+    standardize=None,
+    output_sequence_length=MAX_SEQUENCE_LENGTH_OUT)
 
-examples = examples.shuffle(BUFFER_SIZE)
-train_examples = examples.take(train_size)
-test_examples = examples.skip(train_size)
-val_examples = test_examples.skip(val_size)
-test_examples = test_examples.take(test_size)
+  train_text_in = train_examples.map(lambda x: x[0])
+  train_text_out = train_examples.map(lambda x: x[1])
+  int_vectorize_layer_in.adapt(train_text_in)
+  int_vectorize_layer_out.adapt(train_text_out)
 
-
-
-int_vectorize_layer_in = TextVectorization(
-  max_tokens=VOCAB_SIZE_IN,
-  output_mode='int',
-  standardize=None,
-  output_sequence_length=MAX_SEQUENCE_LENGTH_IN)
-int_vectorize_layer_out = TextVectorization(
-  max_tokens=VOCAB_SIZE_OUT,
-  output_mode='int',
-  standardize=None,
-  output_sequence_length=MAX_SEQUENCE_LENGTH_OUT)
-
-train_text_in = train_examples.map(lambda x: x[0])
-train_text_out = train_examples.map(lambda x: x[1])
-int_vectorize_layer_in.adapt(train_text_in)
-int_vectorize_layer_out.adapt(train_text_out)
+  return (train_examples, val_examples, test_examples), (int_vectorize_layer_in, int_vectorize_layer_out)
 
 
-# vocab_in = int_vectorize_layer_in.get_vocabulary()
-# for i, v in enumerate(vocab_in):
-#   print(i, "-> ", v)
-# vocab_out = int_vectorize_layer_out.get_vocabulary()
-# for i, v in enumerate(vocab_out):
-#   print(i, "-> ", v)
-
+(train_examples, val_examples, test_examples), (int_vectorize_layer_in, int_vectorize_layer_out) = load_data(datadir)
+  
 
 def prepare_data(x):
   text_in = tf.expand_dims(x[:,0], -1)
@@ -119,9 +124,6 @@ def make_batches(ds):
     .batch(BATCH_SIZE)
     .map(prepare_data, num_parallel_calls=tf.data.AUTOTUNE)
     .prefetch(tf.data.AUTOTUNE))
-
-train_batches = make_batches(train_examples)
-val_batches = make_batches(val_examples)
 
 
 def get_angles(pos, i, d_model):
@@ -144,14 +146,14 @@ def positional_encoding(position, d_model):
   return tf.cast(pos_encoding, dtype=tf.float32)
 
 
-n, d = 2048, 512
-pos_encoding = positional_encoding(n, d)
-pos_encoding = pos_encoding[0]
+# n, d = 2048, 512
+# pos_encoding = positional_encoding(n, d)
+# pos_encoding = pos_encoding[0]
 
-# Juggle the dimensions for the plot
-pos_encoding = tf.reshape(pos_encoding, (n, d//2, 2))
-pos_encoding = tf.transpose(pos_encoding, (2, 1, 0))
-pos_encoding = tf.reshape(pos_encoding, (d, n))
+# # Juggle the dimensions for the plot
+# pos_encoding = tf.reshape(pos_encoding, (n, d//2, 2))
+# pos_encoding = tf.transpose(pos_encoding, (2, 1, 0))
+# pos_encoding = tf.reshape(pos_encoding, (d, n))
 
 # plt.pcolormesh(pos_encoding, cmap='RdBu')
 # plt.ylabel('Depth')
@@ -255,12 +257,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
     return output, attention_weights
 
-
-temp_mha = MultiHeadAttention(d_model=512, num_heads=8)
-y = tf.random.uniform((1, 60, 512))  # (batch_size, encoder_sequence, d_model)
-out, attn = temp_mha(y, k=y, q=y, mask=None)
-print(out.shape, attn.shape)
-
+  
 def point_wise_feed_forward_network(d_model, dff):
   return tf.keras.Sequential([
       tf.keras.layers.Dense(dff, activation='relu'),  # (batch_size, seq_len, dff)
@@ -447,6 +444,7 @@ class Transformer(tf.keras.Model):
     return enc_padding_mask, look_ahead_mask, dec_padding_mask
 
   
+  
 WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
   def __init__(self, d_model, warmup_steps=WARMUP_STEPS):
@@ -610,7 +608,7 @@ def train_step(inp, tar, ispositive):
   with tf.GradientTape() as tape:
     predictions, _ = transformer([inp, tar_inp],
                                  training = True)
-    pos_loss, neg_loss, loss = funny_loss_function(tar_real, predictions, ispositive)
+    pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
 
   gradients = tape.gradient(loss, transformer.trainable_variables)
   gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
@@ -621,6 +619,11 @@ def train_step(inp, tar, ispositive):
   train_neg_loss(neg_loss)
   train_accuracy(accuracy_function(tar_real, predictions, ispositive))
 
+train_batches = make_batches(train_examples)
+val_batches = make_batches(val_examples)
+
+
+  
 for epoch in range(EPOCHS):
   start = time.time()
 
@@ -721,6 +724,79 @@ class Translator(tf.Module):
     return tokens, probs
 
 
+  def beamsearch(self, sentence, max_length=20, beamsize=10):
+    assert isinstance(sentence, tf.Tensor)
+    if len(sentence.shape) == 0:
+      sentence = sentence[tf.newaxis]
+
+    sentence = self.tokenizer_in(sentence)
+    encoder_input = sentence
+
+    output_array = [self.start[0]]
+
+    # list of top k output sequences
+    top = [(1.0, output_array, 1, False)]
+
+    while len(top) > 0:  
+      # expand most probable sequence that hasn't ended yet
+
+      index = 0
+      found = False
+      while index < len(top):
+        p_curr, output_curr, len_curr, ended_curr = top[index]
+        if not ended_curr:
+          del top[index]
+          found = True
+          break
+        index += 1
+        
+      if not found: # no more sequences to expand
+        break
+
+      output = tf.convert_to_tensor([output_curr])
+      predictions, _ = self.transformer([encoder_input, output], training=False)
+      predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)      
+      predicted_probs = tf.nn.softmax(predictions)[0][0]
+
+      cumulative_probs = predicted_probs * p_curr
+
+      # get the k best continuations
+      k = tf.minimum(beamsize, cumulative_probs.shape[0])
+      selected_probs = tf.math.top_k(cumulative_probs, sorted=True, k=k)
+
+      # merge them into top
+      values = tf.unstack(selected_probs.values)
+      indices = tf.unstack(tf.cast(selected_probs.indices, dtype=tf.int64))
+      start_index = 0
+      for prob, predicted_id in zip(values, indices):
+        if start_index == len(top) and len(top) >= beamsize:
+          break
+
+        new_output = copy.deepcopy(output_curr)
+        new_output.append(predicted_id)
+        while(True):
+          if start_index >= len(top):
+            break
+          else:
+            top_prob, _, _, _ = top[start_index]
+            if top_prob < prob:            
+              break
+          start_index += 1
+        end = tf.constant(predicted_id == self.end[0] or len_curr+1 >= max_length)
+        top.insert(start_index, (prob, new_output, len_curr+1, end))
+      top = top[:beamsize]
+
+    result = []
+    for t in top:
+      prob = t[0]
+      output_array = t[1]
+      output = tf.convert_to_tensor([output_array])
+      tokens = tf.gather(self.vocab_out, output)  
+      text = tf.strings.reduce_join(tokens, separator=' ').numpy()
+      result.append((prob, tokens))
+
+    return result
+
 translator = Translator(int_vectorize_layer_in, int_vectorize_layer_out, transformer)
 
 
@@ -746,19 +822,19 @@ def print_translation(sentence, pred_tokens, ground_truth, ispositive):
 #   print(f'{"Ground truth":15s}: {ground_truth.numpy()}')
 #   print(f'{"Positive":15s}: {ispositive.numpy()}')
 
-print("\n\nTRAIN")
-inputs = []
-for e in train_examples:
-  sentence = e[0]
-  if sentence in inputs:
-    continue
-  else:
-    inputs.append(sentence)
+def eval(examples, iterations=10):
+  inputs = []
+  for e in examples:
+    sentence = e[0]
+    if sentence in inputs:
+      continue
+    else:
+      inputs.append(sentence)
 
     print("---------")
     print(f'{"Input:":15s}: {sentence.numpy()}')
     outputs = []
-    for i in range(10):
+    for i in range(iterations):
       if i==0:
         deterministic=True
       else:
@@ -771,6 +847,25 @@ for e in train_examples:
     for (prob, text) in outputs:
       print(f'{prob:.10f}: {text}')
 
+def eval_beamsearch(examples, beamsize=20, max_length=20):
+  inputs = []
+  for e in examples:
+    sentence = e[0]
+    if sentence in inputs:
+      continue
+    else:
+      inputs.append(sentence)
+      
+    print("---------")
+    print(f'{"Input:":15s}: {sentence.numpy()}')
+    translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
+    for (prob, text) in translations:
+      print(f'{prob:.10f}: {text}')
+
+print("\n\nTRAIN")
+eval_beamsearch(train_examples, beamsize=30, max_length=30)
+# eval(train_examples)
+      
 # xxx
     
 # print("\n\nVAL")

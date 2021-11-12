@@ -15,9 +15,9 @@ def one2one(probs, size, path, ispositive=True):
     tf.data.experimental.save(dataset, path)
 
 
-def one2many(probs, size, path, ispositive=True):
+def one2many(x, probs, size, ispositive=True):
     dataset_elements = []
-    d_input = "SOS X EOS"
+    d_input = "SOS {} EOS".format(x)
     for _ in range(size):
         sample = get_sample(probs)
         sample = [str(s) for s in sample]
@@ -26,7 +26,7 @@ def one2many(probs, size, path, ispositive=True):
         dataset_elements.append((d_input, d_output, str(ispositive)))
 
     dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
-    tf.data.experimental.save(dataset, path)
+    return dataset
 
 def get_sample(probs):
     if probs == []:
@@ -49,24 +49,24 @@ def create_node(probs, nodes):
 
 
     
-probs1 = [0.6, 0.3, 0.09, 0.01]
-path1 = "synthetic/syn1"
-size1=100000
-one2one(probs1, size1, path1)
+# probs1 = [0.6, 0.3, 0.09, 0.01]
+# path1 = "synthetic/syn1"
+# size1=100000
+# one2one(probs1, size1, path1)
 
 
-leaf1 = [(0.6,[]), (0.3,[]), (0.09,[]), (0.01,[])]
-leaf2 = [(0.5,[]), (0.3,[]), (0.1,[]), (0.1,[])]
-leaf3 = [(0.4,[]), (0.2,[]), (0.2,[]), (0.2,[])]
-leaf4 = [(0.8,[]), (0.1,[]), (0.05,[]), (0.05,[])]
-probs2 = [(0.6,leaf1), (0.3,leaf2), (0.09,leaf3), (0.01,leaf4)]
-size2=100000
-path2 = "synthetic/syn2"
-one2many(probs2, size2, path2)
+# leaf1 = [(0.6,[]), (0.3,[]), (0.09,[]), (0.01,[])]
+# leaf2 = [(0.5,[]), (0.3,[]), (0.1,[]), (0.1,[])]
+# leaf3 = [(0.4,[]), (0.2,[]), (0.2,[]), (0.2,[])]
+# leaf4 = [(0.8,[]), (0.1,[]), (0.05,[]), (0.05,[])]
+# probs2 = [(0.6,leaf1), (0.3,leaf2), (0.09,leaf3), (0.01,leaf4)]
+# size2=100000
+# path2 = "synthetic/syn2"
+# one2many(probs2, size2, path2)
 
 
 
-
+SIZE = 100000
 
 
 p1 = [0.6, 0.3, 0.09, 0.01]
@@ -84,7 +84,30 @@ deg22 = create_node(p2, [deg12, deg13, deg14, deg11])
 deg23 = create_node(p3, [deg13, deg14, deg11, deg12])
 deg24 = create_node(p4, [deg14, deg11, deg12, deg13])
 
-probs3 = create_node(p1, [deg21, deg22, deg23, deg24])
-size3=100000
-path3 = "synthetic/syn3"
-one2many(probs3, size3, path3)
+deg31 = create_node(p1, [deg21, deg22, deg23, deg24])
+
+# d1 = one2many("deg11", deg11, SIZE)
+# d2 = one2many("deg12", deg12, SIZE)
+# d3 = one2many("deg21", deg21, SIZE)
+# d4 = one2many("deg22", deg22, SIZE)
+# d5 = one2many("deg31", deg31, SIZE)
+
+# dataset = d1
+# for d in (d2, d3, d4, d4):
+#     dataset = dataset.concatenate(d)
+
+# tf.data.experimental.save(dataset, "synthetic/combined")
+
+
+d1 = one2many("deg11", deg11, SIZE//1000)
+d2 = one2many("deg12", deg12, SIZE//100)
+d3 = one2many("deg21", deg21, SIZE//10)
+d4 = one2many("deg22", deg22, SIZE//10)
+d5 = one2many("deg31", deg31, SIZE)
+
+dataset = d1
+for d in (d2, d3, d4, d4):
+    dataset = dataset.concatenate(d)
+
+tf.data.experimental.save(dataset, "synthetic/combined_unbalanced")
+

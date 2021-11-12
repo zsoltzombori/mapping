@@ -33,10 +33,11 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
-EPOCHS = 5
-BATCH_SIZE = 256
+EPOCHS = 10
+BATCH_SIZE = 1024 # 256
 BEAMSIZE=30
-MAX_EVAL_LENGTH = 30
+MAX_EVAL_LENGTH = 10
+PARSE=False
 
 
 BUFFER_SIZE = 200000
@@ -798,10 +799,12 @@ class Translator(tf.Module):
       tokens = tf.gather(self.vocab_out, output)
       tokens = tokens[0].numpy()
       tokens = [t.decode('UTF-8') for t in tokens]
-      rule, isvalid = parse_rule(tokens)
-      if isvalid:
-        # text = tf.strings.reduce_join(tokens[0], separator=' ').numpy()
-        result.append((prob, rule))
+      if PARSE:
+        rule, isvalid = parse_rule(tokens)
+        if isvalid:
+          result.append((prob, rule))
+      else:
+        result.append((prob, " ".join(tokens)))
 
     return result
 

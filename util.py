@@ -219,6 +219,14 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     cursor.execute(query)
     result = cursor.fetchall()
     result = list(set(result))
+
+    # remove null values
+    result_filtered = []
+    for r in result:
+        if None not in r:
+            result_filtered.append(r)
+    result = result_filtered
+    
     pos_size = min(pos_size, len(result))
     pos_tuples = result[:pos_size]
     pos_mappings = []
@@ -240,7 +248,7 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     neg_mappings = []
     neg_targets = []
     neg_tuples = []
-    attempts = 10000
+    attempts = 1000
     while (len(neg_targets) < pos_targets_size) and attempts > 0:
         attempts -= 1
         # generate a random tuple of matching type

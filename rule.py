@@ -39,9 +39,6 @@ class Rule:
         target.append("EOH")
         
         return self.candidate_mappings(self.body, subst, {}, target)
-        
-
-
 
 
     def unifying_facts(self, atom):
@@ -119,20 +116,37 @@ class Rule:
         facts = self.unifying_facts(B)
         for f in facts:
             constants_match = True
+
+            # we don't want an unary predicate that is just the projection of an existing binary predicate
+            redundant_pred = False
+            for m in mapping:
+               p,v = mapping[m]
+               if f[1] == p and f[2] == v:
+                   redundant_pred = True
+                   break
+               if len(p) == 3:
+                   if f[1] == (p[0], p[1]) and f[2][0] == v[0]:
+                       redundant_pred = True
+                       break
+                   if f[1] == (p[0], p[2]) and f[2][0] == v[1]:
+                       redundant_pred = True
+                       break
+            if redundant_pred:
+                break
             
             #     Mapping2 is Mapping + {pred(B) -> pred(F)}
             mapping2 = mapping.copy()
             mapping2[f[0]] = (f[1], f[2])
 
-            if False: # TODO
-                args = list(f[2])
-            else:
-                args = []
-                for a, v in zip(B2[1:], f[2]):
-                    if isinstance(a, Variable):
-                        args.append("var_{}".format(a.n))
-                    elif isinstance(a, Constant):
-                        args.append(v)
+            args = []
+            for a, v in zip(B2[1:], f[2]):
+                if isinstance(a, Variable):
+                    args.append("var_{}".format(a.n))
+                elif isinstance(a, Constant):
+                    if isinstance(v, str):
+                        v_parts = v.split()
+                        v = "_".join(v_parts)
+                    args.append(v)
 
             target2 = target + [util.pred2name(f[1])] + args + ["EOP"]
 

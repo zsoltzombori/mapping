@@ -1,4 +1,12 @@
 ####################
+2021.11.12
+
+Tried training together different inputs with same sample size
+Looks quite ok
+
+Extremely small dataset for ProgramCommittee, Conference, ProgramCommitteeMember, siteURL, title, date: works rather bad
+
+####################
 2021.11.11
 
 cmt_renamed is mostly aligned

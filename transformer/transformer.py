@@ -14,7 +14,7 @@ import itertools
 os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
 
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 import tensorflow as tf
 print("GPU available: ", tf.config.list_physical_devices('GPU'))
@@ -33,11 +33,11 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
 logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
-EPOCHS = 10
-BATCH_SIZE = 1024 # 256
+EPOCHS = 50
+BATCH_SIZE = 1024
 BEAMSIZE=30
-MAX_EVAL_LENGTH = 10
-PARSE=False
+MAX_EVAL_LENGTH = 20
+PARSE=True
 
 
 BUFFER_SIZE = 200000
@@ -86,6 +86,7 @@ def load_data(datadir):
   
   examples = examples.shuffle(BUFFER_SIZE)
   train_examples = examples.take(train_size)
+  train_examples = examples.take(df_size) # TODO remove this line
   test_examples = examples.skip(train_size)
   val_examples = test_examples.skip(val_size)
   test_examples = test_examples.take(test_size)
@@ -625,7 +626,7 @@ def train_step(inp, tar, ispositive):
   train_accuracy(accuracy_function(tar_real, predictions, ispositive))
 
 train_batches = make_batches(train_examples)
-val_batches = make_batches(val_examples)
+# val_batches = make_batches(val_examples)
 
 
   

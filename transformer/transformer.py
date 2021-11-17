@@ -492,8 +492,28 @@ def entropy_loss(pred):
   entropy = - tf.reduce_sum(probs * tf.math.log(probs), axis=-1)
   return entropy
 
+def loss_for_negatives(real, pred):
+  real_onehot = tf.one_hot(real, pred.shape[-1])
+  pred_masked_real = pred - real_onehot * 1e10
+  pred_masked_real = tf.reshape(pred_masked_real, (-1, pred_masked_real.shape[2]))
+  sampled_target = tf.random.categorical(pred_masked_real, 1)
+  print(sampled_target.shape)
+  print(real.shape)
+  sampled_target = tf.reshape(real.shape)
+
+  loss_ = loss_object(sampled_target, pred) - loss_object(real, pred)
+  
+  print(real[0])
+  print(sampled_target[0])
+  print(pred[0])
+  print(pred_masked_real[0])
+  xxx
+
+  return loss_
+
 
 def loss_function(real, pred, ispositive):
+  loss_for_negatives(real, pred)
   loss_ = loss_object(real, pred)
   mask = tf.math.logical_not(tf.math.equal(real, 0))
   mask = tf.cast(mask, dtype=loss_.dtype)
@@ -511,6 +531,7 @@ def loss_function(real, pred, ispositive):
   pos_loss = tf.reduce_mean(pos_loss)
   neg_loss = tf.reduce_mean(neg_loss)
   return pos_loss, neg_loss, loss
+
 
 def my_gather(x):
   return tf.gather(x[0], x[1])

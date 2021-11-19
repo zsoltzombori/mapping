@@ -1,6 +1,6 @@
-EPOCHS = 20
-BATCH_SIZE = 128 # 1024
-BEAMSIZE=30
+EPOCHS = 1
+BATCH_SIZE = 1024
+BEAMSIZE=10
 PARSE=True
 
 
@@ -55,20 +55,27 @@ elif LR_TYPE == "decay":
   learning_rate = tf.keras.optimizers.schedules.ExponentialDecay(LR, decay_steps=10, decay_rate=0.96, staircase=True)
 else:
   learning_rate = LR
-optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+pos_optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+neg_optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
 # create transformer
 vocab_size_in = len(tokenizer_in.get_vocabulary())
 vocab_size_out = len(tokenizer_out.get_vocabulary())
-my_transformer = transformer.Transformer(
+pos_transformer = transformer.Transformer(
+    num_layers=NUM_LAYERS, d_model=D_MODEL,
+    num_heads=NUM_HEADS, dff=DFF,
+    input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
+    pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
+neg_transformer = transformer.Transformer(
     num_layers=NUM_LAYERS, d_model=D_MODEL,
     num_heads=NUM_HEADS, dff=DFF,
     input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
     pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
 
 if USE_CHECKPOINT:
+  # TODO
   checkpoint_path = "./checkpoints/train"
-  ckpt = tf.train.Checkpoint(transformer=transformer, optimizer=optimizer)
+  ckpt = tf.train.Checkpoint(transformer=pos_transformer, optimizer=optimizer)
   ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
   # if a checkpoint exists, restore the latest checkpoint.
   if ckpt_manager.latest_checkpoint:
@@ -79,10 +86,11 @@ else:
 
 
 # train the transformer
-transformer.train(EPOCHS, my_transformer, optimizer, train_batches, ckpt_manager)
+transformer.train1(EPOCHS, pos_transformer, pos_optimizer, train_batches, loss_type=tf.constant(1.0), ckpt_manager=ckpt_manager)
+transformer.train2(EPOCHS, neg_transformer, neg_optimizer, train_batches, loss_type=tf.constant(-1.0), ckpt_manager=ckpt_manager)
 
 # create a translator
-my_translator = transformer.Translator(tokenizer_in, tokenizer_out, my_transformer)
+pos_translator = transformer.Translator(tokenizer_in, tokenizer_out, pos_transformer)
 
 def print_translation(sentence, pred_tokens, ground_truth, ispositive):
   cnt = tf.size(pred_tokens).numpy()
@@ -123,7 +131,7 @@ def eval(examples, iterations=10):
 
 
 
-def eval_beamsearch(examples, beamsize, max_length):
+def eval_beamsearch(translator, examples, beamsize, max_length, critique=None):
   inputs = []
   for e in examples:
     sentence = e[0]
@@ -134,20 +142,14 @@ def eval_beamsearch(examples, beamsize, max_length):
       
     print("---------")
     print(f'{"Input:":15s}: {sentence.numpy()}')
-    translations = my_translator.beamsearch(tf.constant(sentence), parse=PARSE, beamsize=beamsize, max_length=max_length)
-    for (prob, text) in translations:
-      print(f'{prob:.10f}: {text}')
+    if critique is not None:
+      translations = translator.beamsearch_with_critique(tf.constant(sentence), critique, parse=PARSE, beamsize=beamsize, max_length=max_length)
+      for (prob, prob_c, text) in translations:
+        print(f'{prob:.10f} - {prob_c:.10f}: {text}')
+    else:
+      translations = translator.beamsearch(tf.constant(sentence), parse=PARSE, beamsize=beamsize, max_length=max_length)
+      for (prob, text) in translations:
+        print(f'{prob:.10f}: {text}')
 
 print("\n\nTRAIN")
-eval_beamsearch(train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH)
-# eval(train_examples)
-      
-# xxx
-    
-# print("\n\nVAL")
-# for e in val_examples.take(100):
-#   sentence = e[0]
-#   ground_truth = e[1]
-#   ispositive = e[2]
-#   pred_tokens = my_translator(tf.constant(sentence))
-#   print_translation(sentence, pred_tokens, ground_truth, ispositive)
+eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer)

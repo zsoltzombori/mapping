@@ -452,7 +452,9 @@ def loss_function_selective(real, pred, ispositive, loss_type):
 
   pos_loss = loss * ispositive * (loss_type + 1.0) / 2
   neg_loss = loss * (ispositive-1.0) * (loss_type - 1.0) / 2
-  loss = pos_loss + neg_loss
+  # loss = pos_loss + neg_loss
+
+  loss = (1-ispositive) * loss
 
   return pos_loss, neg_loss, loss
   
@@ -548,12 +550,12 @@ train_step_signature = [
 
 
 @tf.function(input_signature=train_step_signature)
-def train_step1(inp, tar, ispositive, loss_type):
+def train_step(inp, tar, ispositive, loss_type):
   tar_inp = tar[:, :-1]
   tar_real = tar[:, 1:]
 
   with tf.GradientTape() as tape:
-    predictions, _ = transformer1([inp, tar_inp],
+    predictions, _ = transformer([inp, tar_inp],
                                  training = True)
     # pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
     pos_loss, neg_loss, loss = loss_function_selective(tar_real, predictions, ispositive, loss_type)
@@ -562,44 +564,19 @@ def train_step1(inp, tar, ispositive, loss_type):
     #                                    lambda: loss_function_selective(tar_real, predictions, ispositive, loss_type)
     #                                    )
 
-  gradients = tape.gradient(loss, transformer1.trainable_variables)
+  gradients = tape.gradient(loss, transformer.trainable_variables)
   gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
-  optimizer1.apply_gradients(zip(gradients, transformer1.trainable_variables))
+  optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
   train_loss(loss)
   train_pos_loss(pos_loss)
   train_neg_loss(neg_loss)
   train_accuracy(accuracy_function(tar_real, predictions, ispositive))
 
-@tf.function(input_signature=train_step_signature)
-def train_step2(inp, tar, ispositive, loss_type):
-  tar_inp = tar[:, :-1]
-  tar_real = tar[:, 1:]
-
-  with tf.GradientTape() as tape:
-    predictions, _ = transformer2([inp, tar_inp],
-                                 training = True)
-    # pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
-    pos_loss, neg_loss, loss = loss_function_selective(tar_real, predictions, ispositive, loss_type)
-    # pos_loss, neg_loss, loss = tf.cond(tf.equal(loss_type, 0.0),
-    #                                    lambda: loss_function(tar_real, predictions, ispositive),
-    #                                    lambda: loss_function_selective(tar_real, predictions, ispositive, loss_type)
-    #                                    )
-
-  gradients = tape.gradient(loss, transformer2.trainable_variables)
-  gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
-  optimizer2.apply_gradients(zip(gradients, transformer2.trainable_variables))
-
-  train_loss(loss)
-  train_pos_loss(pos_loss)
-  train_neg_loss(neg_loss)
-  train_accuracy(accuracy_function(tar_real, predictions, ispositive))
-
-
-def train1(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
-  global transformer1, optimizer1
-  transformer1 = transf
-  optimizer1 = optim
+def train(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
+  global transformer, optimizer
+  transformer = transf
+  optimizer = optim
   for epoch in range(epochs):
     start = time.time()
     train_loss.reset_states()
@@ -608,7 +585,7 @@ def train1(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
     train_accuracy.reset_states()
 
     for (batch, (inp, tar, ispositive)) in enumerate(train_batches):
-      train_step1(inp, tar, ispositive, loss_type)
+      train_step(inp, tar, ispositive, loss_type)
 
       if batch % 50 == 0:
         print(f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
@@ -619,28 +596,6 @@ def train1(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
 
     print(f'Epoch {epoch + 1}: Time {time.time() - start:.2f} secs, Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}, Accuracy {train_accuracy.result():.4f}')
 
-def train2(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
-  global transformer2, optimizer2
-  transformer2 = transf
-  optimizer2 = optim
-  for epoch in range(epochs):
-    start = time.time()
-    train_loss.reset_states()
-    train_pos_loss.reset_states()
-    train_neg_loss.reset_states()
-    train_accuracy.reset_states()
-
-    for (batch, (inp, tar, ispositive)) in enumerate(train_batches):
-      train_step2(inp, tar, ispositive, loss_type)
-
-      if batch % 50 == 0:
-        print(f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
-
-      if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
-        ckpt_save_path = ckpt_manager.save()
-        print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
-
-    print(f'Epoch {epoch + 1}: Time {time.time() - start:.2f} secs, Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}, Accuracy {train_accuracy.result():.4f}')
 
 class Translator(tf.Module):
   def __init__(self, tokenizer_in, tokenizer_out, transf):
@@ -825,11 +780,11 @@ class Translator(tf.Module):
 
       predictions_c, _ = critique([encoder_input, output], training=False)
       predictions_c = predictions_c[:, -1:, :]  # (batch_size, 1, vocab_size)      
-      predicted_probs_c = tf.nn.softmax(predictions)[0][0]
+      predicted_probs_c = tf.nn.softmax(predictions_c)[0][0]
 
-      print(predicted_probs)
-      print(predicted_probs_c)
-      print("-----")
+      # print(predicted_probs)
+      # print(predicted_probs_c)
+      # print("-----")
 
       # tokens = tf.gather(self.vocab_out, output)
       # tokens = tokens[0].numpy()

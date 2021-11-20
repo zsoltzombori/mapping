@@ -1,7 +1,7 @@
-EPOCHS = 1
+EPOCHS = 10
 BATCH_SIZE = 1024
 BEAMSIZE=10
-PARSE=True
+PARSE=False
 
 
 import transformer
@@ -72,6 +72,7 @@ neg_transformer = transformer.Transformer(
     input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
     pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
 
+
 if USE_CHECKPOINT:
   # TODO
   checkpoint_path = "./checkpoints/train"
@@ -86,11 +87,12 @@ else:
 
 
 # train the transformer
-transformer.train1(EPOCHS, pos_transformer, pos_optimizer, train_batches, loss_type=tf.constant(1.0), ckpt_manager=ckpt_manager)
-transformer.train2(EPOCHS, neg_transformer, neg_optimizer, train_batches, loss_type=tf.constant(-1.0), ckpt_manager=ckpt_manager)
+transformer.train(EPOCHS, neg_transformer, neg_optimizer, train_batches, loss_type=tf.constant(-1.0), ckpt_manager=ckpt_manager)
+transformer.train(EPOCHS, pos_transformer, pos_optimizer, train_batches, loss_type=tf.constant(1.0), ckpt_manager=ckpt_manager)
 
 # create a translator
 pos_translator = transformer.Translator(tokenizer_in, tokenizer_out, pos_transformer)
+neg_translator = transformer.Translator(tokenizer_in, tokenizer_out, neg_transformer)
 
 def print_translation(sentence, pred_tokens, ground_truth, ispositive):
   cnt = tf.size(pred_tokens).numpy()
@@ -152,4 +154,7 @@ def eval_beamsearch(translator, examples, beamsize, max_length, critique=None):
         print(f'{prob:.10f}: {text}')
 
 print("\n\nTRAIN")
+eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
 eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer)
+eval_beamsearch(neg_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
+eval_beamsearch(neg_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=pos_transformer)

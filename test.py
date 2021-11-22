@@ -22,9 +22,15 @@ true_schema = supervision.cmt_schema
 schemas = (
     "cmt_renamed",
     "cmt_structured",
+    "cmt_structured_ci",
+    "cmt_naive",
+    "cmt_naive_ci",
+    "cmt_denormalized",
+    "cmt_mixed",
 )
 
 for schema in schemas:
+    print("SCHEMA: ", schema)
     ontology = "RODI/data/{}/ontology.ttl".format(schema)
     query_dir = "RODI/data/{}/queries".format(schema)
     datapath = "outdata/{}".format(schema)

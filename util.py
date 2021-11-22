@@ -239,7 +239,9 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
 
     # create matching number of negative proofs
     pos_targets_size = len(pos_targets)
-    assert pos_targets_size > 0
+    if pos_targets_size == 0:
+        print("No positives found for predicate", predicate)
+        return [], [], [], []
 
     arity = len(result[0])
     sql_types = constants.keys()

@@ -163,7 +163,7 @@ for input_token in pos_tree.children:
         neg_root = None
 
     tops = beam_search(pos_root, neg_root, beamsize=30, maxlen=20)
-    remaining = 5
+    remaining = 50
     print("\n\n----------------", input_token, "\n")
     for t in tops:
         if remaining <= 0:

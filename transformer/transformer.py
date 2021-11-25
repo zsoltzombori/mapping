@@ -5,6 +5,7 @@ NEG_WEIGHT=0.1
 ENT_WEIGHT=0.0
 CLIP_NORM = 0.1
 
+LENGTH_PENALTY=0.5
 
 import collections
 import logging
@@ -25,7 +26,7 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 print("GPU available: ", tf.config.list_physical_devices('GPU'))
 physical_devices = tf.config.list_physical_devices('GPU')
 try:
-  tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
 except:
   # Invalid device or cannot modify virtual devices once initialized.
   pass
@@ -448,80 +449,79 @@ def loss_function_selective(real, pred, ispositive, loss_type):
   mask = tf.cast(mask, dtype=loss_.dtype)
 
   loss_ *= mask
-  loss = tf.reduce_sum(loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+  # loss = tf.reduce_sum(loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+  loss = tf.reduce_sum(loss_, axis=-1)
 
   pos_loss = loss * ispositive * (loss_type + 1.0) / 2
   neg_loss = loss * (ispositive-1.0) * (loss_type - 1.0) / 2
-  # loss = pos_loss + neg_loss
-
-  loss = (1-ispositive) * loss
+  loss = pos_loss + neg_loss
 
   return pos_loss, neg_loss, loss
   
 
-def loss_function(real, pred, ispositive):
-  pos_loss_ = loss_object(real, pred)
+# def loss_function(real, pred, ispositive):
+#   pos_loss_ = loss_object(real, pred)
 
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
-  mask = tf.cast(mask, dtype=pos_loss_.dtype)
+#   mask = tf.math.logical_not(tf.math.equal(real, 0))
+#   mask = tf.cast(mask, dtype=pos_loss_.dtype)
 
-  pos_loss_ *= mask
-  pos_loss = tf.reduce_sum(pos_loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
-  pos_loss = ispositive * pos_loss
+#   pos_loss_ *= mask
+#   pos_loss = tf.reduce_sum(pos_loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+#   pos_loss = ispositive * pos_loss
 
-  neg_loss_ = loss_for_negatives(real, pred)
-  neg_loss_ *= mask
-  # neg_loss = tf.reduce_sum(neg_loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
-  neg_loss = tf.reduce_min(neg_loss_, axis=-1)
-  neg_loss = (1-ispositive) * neg_loss
+#   neg_loss_ = loss_for_negatives(real, pred)
+#   neg_loss_ *= mask
+#   # neg_loss = tf.reduce_sum(neg_loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+#   neg_loss = tf.reduce_min(neg_loss_, axis=-1)
+#   neg_loss = (1-ispositive) * neg_loss
 
   
-  # ent_loss_ = entropy_loss(pred)
-  # ent_loss_ *= mask
-  # ent_loss = tf.reduce_sum(ent_loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
-  # neg_loss = tf.maximum(-NEG_CLIP, (ispositive - 1) * loss)
+#   # ent_loss_ = entropy_loss(pred)
+#   # ent_loss_ *= mask
+#   # ent_loss = tf.reduce_sum(ent_loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+#   # neg_loss = tf.maximum(-NEG_CLIP, (ispositive - 1) * loss)
   
-  loss = pos_loss + NEG_WEIGHT * neg_loss #+ ENT_WEIGHT * ent_loss
-  loss = tf.reduce_mean(loss)
-  pos_loss = tf.reduce_mean(pos_loss)
-  neg_loss = tf.reduce_mean(neg_loss)
-  return pos_loss, neg_loss, loss
+#   loss = pos_loss + NEG_WEIGHT * neg_loss #+ ENT_WEIGHT * ent_loss
+#   loss = tf.reduce_mean(loss)
+#   pos_loss = tf.reduce_mean(pos_loss)
+#   neg_loss = tf.reduce_mean(neg_loss)
+#   return pos_loss, neg_loss, loss
 
 
-def my_gather(x):
-  return tf.gather(x[0], x[1])
+# def my_gather(x):
+#   return tf.gather(x[0], x[1])
 
-def my_gather_list(x):
-  return tf.map_fn(my_gather, x, fn_output_signature=tf.float32)
+# def my_gather_list(x):
+#   return tf.map_fn(my_gather, x, fn_output_signature=tf.float32)
 
-loss_object2 = tf.keras.losses.BinaryCrossentropy(
-    from_logits=True, reduction='none')
+# loss_object2 = tf.keras.losses.BinaryCrossentropy(
+#     from_logits=True, reduction='none')
 
-def funny_loss_function(real, pred, ispositive):
-  mask = tf.math.logical_not(tf.math.equal(real, 0))
+# def funny_loss_function(real, pred, ispositive):
+#   mask = tf.math.logical_not(tf.math.equal(real, 0))
 
-  # binary crossentropy on the target logit
-  target_logits = tf.map_fn(my_gather_list, (pred, real), fn_output_signature=tf.TensorSpec(shape=[None], dtype=tf.float32))
-  target_logits = tf.expand_dims(target_logits, -1)
-  loss_ = loss_object2(tf.ones_like(target_logits), target_logits)
+#   # binary crossentropy on the target logit
+#   target_logits = tf.map_fn(my_gather_list, (pred, real), fn_output_signature=tf.TensorSpec(shape=[None], dtype=tf.float32))
+#   target_logits = tf.expand_dims(target_logits, -1)
+#   loss_ = loss_object2(tf.ones_like(target_logits), target_logits)
 
-  loss_ += loss_object(real, pred)
+#   loss_ += loss_object(real, pred)
 
-  # small force pulling all logits to the opposite direction
-  reg_loss_ = tf.reduce_mean(pred, axis=-1)
-  # loss_ = loss_ + 0.001 * reg_loss_
+#   # small force pulling all logits to the opposite direction
+#   reg_loss_ = tf.reduce_mean(pred, axis=-1)
+#   # loss_ = loss_ + 0.001 * reg_loss_
   
-  mask = tf.cast(mask, dtype=loss_.dtype)
-  loss_ *= mask
+#   mask = tf.cast(mask, dtype=loss_.dtype)
+#   loss_ *= mask
 
-  loss = tf.reduce_sum(loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
-  pos_loss = ispositive * loss
-  neg_loss = tf.maximum(-NEG_CLIP, (ispositive - 1) * loss)
-  loss = pos_loss + NEG_WEIGHT * neg_loss
-  loss = tf.reduce_mean(loss)
-  pos_loss = tf.reduce_mean(pos_loss)
-  neg_loss = tf.reduce_mean(neg_loss)
-  return pos_loss, neg_loss, loss
+#   loss = tf.reduce_sum(loss_, axis=-1)/tf.reduce_sum(mask, axis=-1)
+#   pos_loss = ispositive * loss
+#   neg_loss = tf.maximum(-NEG_CLIP, (ispositive - 1) * loss)
+#   loss = pos_loss + NEG_WEIGHT * neg_loss
+#   loss = tf.reduce_mean(loss)
+#   pos_loss = tf.reduce_mean(pos_loss)
+#   neg_loss = tf.reduce_mean(neg_loss)
+#   return pos_loss, neg_loss, loss
 
 
 def accuracy_function(real, pred, ispositive):
@@ -549,34 +549,34 @@ train_step_signature = [
 ]
 
 
-@tf.function(input_signature=train_step_signature)
-def train_step(inp, tar, ispositive, loss_type):
-  tar_inp = tar[:, :-1]
-  tar_real = tar[:, 1:]
+def train(epochs, transformer, optimizer, train_batches, loss_type, ckpt_manager=None):
 
-  with tf.GradientTape() as tape:
-    predictions, _ = transformer([inp, tar_inp],
-                                 training = True)
-    # pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
-    pos_loss, neg_loss, loss = loss_function_selective(tar_real, predictions, ispositive, loss_type)
-    # pos_loss, neg_loss, loss = tf.cond(tf.equal(loss_type, 0.0),
-    #                                    lambda: loss_function(tar_real, predictions, ispositive),
-    #                                    lambda: loss_function_selective(tar_real, predictions, ispositive, loss_type)
-    #                                    )
+  # @tf.function(input_signature=train_step_signature)
+  def train_step(inp, tar, ispositive, loss_type):
+    tar_inp = tar[:, :-1]
+    tar_real = tar[:, 1:]
 
-  gradients = tape.gradient(loss, transformer.trainable_variables)
-  gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
-  optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+    with tf.GradientTape() as tape:
+      predictions, _ = transformer([inp, tar_inp],
+                                   training = True)
+      # pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
+      pos_loss, neg_loss, loss = loss_function_selective(tar_real, predictions, ispositive, loss_type)
+      # pos_loss, neg_loss, loss = tf.cond(tf.equal(loss_type, 0.0),
+      #                                    lambda: loss_function(tar_real, predictions, ispositive),
+      #                                    lambda: loss_function_selective(tar_real, predictions, ispositive, loss_type)
+      #                                    )
 
-  train_loss(loss)
-  train_pos_loss(pos_loss)
-  train_neg_loss(neg_loss)
-  train_accuracy(accuracy_function(tar_real, predictions, ispositive))
+    gradients = tape.gradient(loss, transformer.trainable_variables)
+    gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
+    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
-def train(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
-  global transformer, optimizer
-  transformer = transf
-  optimizer = optim
+    train_loss(loss)
+    train_pos_loss(pos_loss)
+    train_neg_loss(neg_loss)
+    train_accuracy(accuracy_function(tar_real, predictions, ispositive))
+
+  train_step_ = tf.function(train_step, input_signature=train_step_signature)
+
   for epoch in range(epochs):
     start = time.time()
     train_loss.reset_states()
@@ -585,7 +585,7 @@ def train(epochs, transf, optim, train_batches, loss_type, ckpt_manager=None):
     train_accuracy.reset_states()
 
     for (batch, (inp, tar, ispositive)) in enumerate(train_batches):
-      train_step(inp, tar, ispositive, loss_type)
+      train_step_(inp, tar, ispositive, loss_type)
 
       if batch % 50 == 0:
         print(f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
@@ -755,87 +755,126 @@ class Translator(tf.Module):
     output_array = [self.start[0]]
 
     # list of top k output sequences
-    top = [(1.0, 1.0, output_array, 1, False)]
+    # (score, prob, prob_c, output_array, len, ended)
+    t = {
+        "score":0.0,
+        "logprob":0.0,
+        "logprob_c":0.0,
+        "output":output_array,
+        "len":1,
+        "ended":False,
+        "logprob_hist":[],
+        "logprob_c_hist":[],
+    }
+    top = [t]
 
-    while len(top) > 0:  
-      # expand most probable sequence that hasn't ended yet
-
-      index = 0
-      found = False
-      while index < len(top):
-        p_curr, p_curr_c, output_curr, len_curr, ended_curr = top[index]
-        if not ended_curr:
-          del top[index]
-          found = True
-          break
-        index += 1
+    while len(top) > 0:
         
-      if not found: # no more sequences to expand
-        break
-
-      output = tf.convert_to_tensor([output_curr])
-      predictions, _ = self.transformer([encoder_input, output], training=False)
-      predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)      
-      predicted_probs = tf.nn.softmax(predictions)[0][0]
-
-      predictions_c, _ = critique([encoder_input, output], training=False)
-      predictions_c = predictions_c[:, -1:, :]  # (batch_size, 1, vocab_size)      
-      predicted_probs_c = tf.nn.softmax(predictions_c)[0][0]
-
-      # print(predicted_probs)
-      # print(predicted_probs_c)
-      # print("-----")
-
-      # tokens = tf.gather(self.vocab_out, output)
-      # tokens = tokens[0].numpy()
-      # tokens = [t.decode('UTF-8') for t in tokens]
-      # print("----", p_curr, " ".join(tokens))
-
-      cumulative_probs = predicted_probs * p_curr
-      cumulative_probs_c = predicted_probs_c * p_curr_c
-
-      # get the k best continuations
-      k = tf.minimum(beamsize, cumulative_probs.shape[0])
-      selected_probs = tf.math.top_k(cumulative_probs, sorted=True, k=k)
-
-      # merge them into top
-      values = tf.unstack(selected_probs.values)
-      indices = tf.unstack(tf.cast(selected_probs.indices, dtype=tf.int64))
-      values_c = tf.gather(cumulative_probs_c, indices)
-      start_index = 0
-      for prob, prob_c, predicted_id in zip(values, values_c, indices):
-        if start_index == len(top) and len(top) >= beamsize:
-          break
-
-        new_output = copy.deepcopy(output_curr)
-        new_output.append(predicted_id)
-        while(True):
-          if start_index >= len(top):
+        # expand most probable sequence that hasn't ended yet
+        index = 0
+        found = False
+        while index < len(top):
+            curr = top[index]
+            if not curr["ended"]:
+                del top[index]
+                found = True
+                break
+            index += 1
+        if not found: # no more sequences to expand
             break
-          else:
-            top_prob, _, _, _, _ = top[start_index]
-            if top_prob < prob:            
-              break
-          start_index += 1
-        end = tf.constant(predicted_id == self.end[0] or len_curr+1 >= max_length)
-        top.insert(start_index, (prob, prob_c, new_output, len_curr+1, end))
-      top = top[:beamsize]
 
+        output = tf.convert_to_tensor([curr["output"]])
+        predictions, _ = self.transformer([encoder_input, output], training=False)
+        predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)
+        logprobs = predictions - tf.math.reduce_logsumexp(predictions, axis=-1, keepdims=True)
+        logprobs = logprobs[0][0]
+
+        predictions_c, _ = critique([encoder_input, output], training=False)
+        predictions_c = predictions_c[:, -1:, :]  # (batch_size, 1, vocab_size)      
+        logprobs_c = predictions_c - tf.math.reduce_logsumexp(predictions_c, axis=-1, keepdims=True)
+        logprobs_c = logprobs_c[0][0]
+
+
+        cumulative_logprobs = logprobs + curr["logprob"]
+        cumulative_logprobs_c = logprobs_c + curr["logprob_c"]
+        cumulative_scores = cumulative_logprobs
+        # cumulative_scores /= tf.math.pow((6+curr["len"])/(6+1),LENGTH_PENALTY) 
+      
+        # get the k best continuations
+        k = tf.minimum(beamsize, cumulative_scores.shape[0])
+        selected_scores = tf.math.top_k(cumulative_scores, sorted=True, k=k)
+
+        # merge them into top
+        scores = tf.unstack(selected_scores.values)
+        indices = tf.unstack(tf.cast(selected_scores.indices, dtype=tf.int64))
+        logprobs = tf.gather(logprobs, indices)
+        logprobs_c = tf.gather(logprobs_c, indices)
+        cumulative_logprobs = tf.gather(cumulative_logprobs, indices)
+        cumulative_logprobs_c = tf.gather(cumulative_logprobs_c, indices)
+        start_index = 0
+
+        # insert each new element into top
+        for (i, predicted_id) in enumerate(indices):
+            score = scores[i]
+            logprob = logprobs[i]
+            logprob_c = logprobs_c[i]
+            cumulative_logprob = cumulative_logprobs[i]
+            cumulative_logprob_c = cumulative_logprobs_c[i]
+
+            if start_index == len(top) and len(top) >= beamsize:
+                break
+
+            # find the place of the new element
+            while(True):
+                if start_index >= len(top):
+                    break
+                else:
+                    t = top[start_index]
+                    if score > t["score"]:
+                        break
+                start_index += 1
+          
+            new_output = copy.deepcopy(curr["output"])
+            new_output.append(predicted_id)
+            end = tf.constant(predicted_id == self.end[0] or curr["len"]+1 >= max_length)
+            new_logprob_hist = copy.copy(curr["logprob_hist"])
+            new_logprob_c_hist = copy.copy(curr["logprob_c_hist"])
+            new_logprob_hist.append(logprob)
+            new_logprob_c_hist.append(logprob_c)
+            new_item = {
+                "score":score,
+                "logprob":cumulative_logprob,
+                "logprob_c":cumulative_logprob_c,
+                "output":new_output,
+                "len":curr["len"] + 1,
+                "ended":end,
+                "logprob_hist":new_logprob_hist,
+                "logprob_c_hist":new_logprob_c_hist,
+            }
+            top.insert(start_index, new_item)
+        top = top[:beamsize]
+
+    # collect best results
     result = []
     for t in top:
-      prob = t[0]
-      prob_c = t[1]
-      output_array = t[2]
-      output = tf.convert_to_tensor([output_array])
-      tokens = tf.gather(self.vocab_out, output)
-      tokens = tokens[0].numpy()
-      tokens = [t.decode('UTF-8') for t in tokens]
-      if parse:
-        rule, isvalid = parse_rule(tokens)
-        if isvalid:
-          result.append((prob, prob_c, rule))
-      else:
-        result.append((prob, prob_c, " ".join(tokens)))
+        output = tf.convert_to_tensor([t["output"]])
+        tokens = tf.gather(self.vocab_out, output)
+        tokens = tokens[0].numpy()
+        tokens = [t.decode('UTF-8') for t in tokens]
+
+        score = t["score"]
+        prob = tf.exp(t["logprob"])
+        prob_c = tf.exp(t["logprob_c"])
+        prob_hist = [tf.exp(x) for x in t["logprob_hist"]]
+        prob_c_hist = [tf.exp(x) for x in t["logprob_c_hist"]]
+
+        if parse:
+            rule, isvalid = parse_rule(tokens)
+            if not isvalid:
+                break
+        else:
+            rule = " ".join(tokens)
+        result.append((score, prob, prob_c, prob_hist, prob_c_hist, rule))
 
     return result
 

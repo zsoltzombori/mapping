@@ -1,3 +1,41 @@
+
+####################
+2021.11.24
+
+Recover single token probability
+- how does success depend on entropy?
+- how does it depend on length?
+
+Multiple otken probability
+- how does it depend on the alphabet in later tokens?
+
+-1.8910 - 0.3535 - 0.017606: SOS 0 EOS
+-2.7020 - 0.2263 - 0.002522: SOS 1 EOS
+-3.1599 - 0.2179 - 0.000056: SOS 2 3 EOS
+-3.2758 - 0.2018 - 0.000003: SOS 2 4 EOS
+
+-1.9482 - 0.3426 - 0.055055: SOS 0 EOS
+-2.7542 - 0.2755 - 0.004971: SOS 2 0 EOS
+-2.7988 - 0.2146 - 0.008660: SOS 1 EOS
+-3.5070 - 0.1670 - 0.001779: SOS 2 1 EOS
+
+
+Visualise intermediary probs
+- is it true that the inaccuracy is at extreme probabilities?
+
+How can we normalise probabilities?
+
+
+
+
+####################
+2021.11.22
+
+cmt_renamed:
+    perfect except name does not pick up its relation to Conferences
+
+
+
 ####################
 2021.11.12
 

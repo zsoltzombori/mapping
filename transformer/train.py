@@ -1,7 +1,16 @@
-EPOCHS = 10
+EPOCHS = 100
 BATCH_SIZE = 1024
-BEAMSIZE=10
-PARSE=False
+BEAMSIZE=100
+PARSE=True
+MIN_POSNEG_RATIO = 10
+
+# # divide GPUs, by randomly selecting one for each process
+# import os
+# import numpy as np
+# gpus = os.environ["CUDA_VISIBLE_DEVICES"].split(',')
+# gpu_count = len(gpus)
+# gpu = gpus[np.random.randint(0, gpu_count)]
+# os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
 
 import transformer
@@ -26,7 +35,7 @@ WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
 
 # transformer parameters
 NUM_LAYERS = 4
-D_MODEL = 128
+D_MODEL = 512
 DFF = 512
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
@@ -52,7 +61,7 @@ train_batches = transformer.make_batches(train_examples, tokenizer_in, tokenizer
 if LR_TYPE == "custom":
   learning_rate = CustomSchedule(D_MODEL, WARMUP_STEPS)
 elif LR_TYPE == "decay":
-  learning_rate = tf.keras.optimizers.schedules.ExponentialDecay(LR, decay_steps=10, decay_rate=0.96, staircase=True)
+  learning_rate = tf.keras.optimizers.schedules.ExponentialDecay(LR, decay_steps=10, decay_rate=0.9, staircase=True)
 else:
   learning_rate = LR
 pos_optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
@@ -87,8 +96,8 @@ else:
 
 
 # train the transformer
-transformer.train(EPOCHS, neg_transformer, neg_optimizer, train_batches, loss_type=tf.constant(-1.0), ckpt_manager=ckpt_manager)
 transformer.train(EPOCHS, pos_transformer, pos_optimizer, train_batches, loss_type=tf.constant(1.0), ckpt_manager=ckpt_manager)
+transformer.train(EPOCHS, neg_transformer, neg_optimizer, train_batches, loss_type=tf.constant(-1.0), ckpt_manager=ckpt_manager)
 
 # create a translator
 pos_translator = transformer.Translator(tokenizer_in, tokenizer_out, pos_transformer)
@@ -133,7 +142,7 @@ def eval(examples, iterations=10):
 
 
 
-def eval_beamsearch(translator, examples, beamsize, max_length, critique=None):
+def eval_beamsearch(translator, examples, beamsize, max_length, critique=None, min_posneg_ratio=1000):
   inputs = []
   for e in examples:
     sentence = e[0]
@@ -146,15 +155,19 @@ def eval_beamsearch(translator, examples, beamsize, max_length, critique=None):
     print(f'{"Input:":15s}: {sentence.numpy()}')
     if critique is not None:
       translations = translator.beamsearch_with_critique(tf.constant(sentence), critique, parse=PARSE, beamsize=beamsize, max_length=max_length)
-      for (prob, prob_c, text) in translations:
-        print(f'{prob:.10f} - {prob_c:.10f}: {text}')
+      for (score, prob, prob_c, prob_hist, prob_c_hist, text) in translations[:10]:
+        if (prob / prob_c) < min_posneg_ratio: # not enough separation between pos and neg probs
+          padding="     "
+        else:
+          padding=""
+        print(f'{padding}{score:.4f} - {prob:.4f} - {prob_c:.6f}: {text}')
+        # print("----> ", [p.numpy() for p in prob_hist])
+        # print("----> ", [p.numpy() for p in prob_c_hist])
     else:
       translations = translator.beamsearch(tf.constant(sentence), parse=PARSE, beamsize=beamsize, max_length=max_length)
-      for (prob, text) in translations:
+      for (prob, text) in translations[:10]:
         print(f'{prob:.10f}: {text}')
 
 print("\n\nTRAIN")
-eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
-eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer)
-eval_beamsearch(neg_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
-eval_beamsearch(neg_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=pos_transformer)
+eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer, min_posneg_ratio=MIN_POSNEG_RATIO)
+# eval_beamsearch(neg_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=pos_transformer)

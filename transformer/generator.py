@@ -109,7 +109,7 @@ if False:
         dataset = dataset.concatenate(d)
     tf.data.experimental.save(dataset, "synthetic/combined_unbalanced")
 
-if True:
+if False:
     SIZE=10000
     
     p1 = [0.4, 0.3, 0.2, 0.1]
@@ -123,3 +123,49 @@ if True:
     dataset=dataset.concatenate(d2)
     print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
     tf.data.experimental.save(dataset, "synthetic/len1_neg")
+
+if True: # four sequences: 0, 1, 23, 24
+    SIZE=10000
+    deg11 = create_leaf([0.6, 0.4, 0, 0, 0])
+    d1 = one2many("input", deg11, SIZE, ispositive=True)
+
+    deg12 = create_leaf([0.0, 0.0, 0, 0.6, 0.4])
+    deg21 = create_node([0.0, 0.0, 1.0, 0.0, 0.0], [deg12, deg12, deg12, deg12, deg12])    
+    d2 = one2many("input", deg21, SIZE, ispositive=True)
+    
+    dataset=d1
+    dataset=dataset.concatenate(d2)
+    print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
+    tf.data.experimental.save(dataset, "synthetic/len_effect1")
+
+if True: # four sequences: 0, 1, 20, 21
+    SIZE=10000
+    deg11 = create_leaf([0.6, 0.4, 0, 0, 0])
+    d1 = one2many("input", deg11, SIZE, ispositive=True)
+
+    deg21 = create_node([0.0, 0.0, 1.0, 0.0, 0.0], [deg11, deg11, deg11, deg11, deg11])
+    d2 = one2many("input", deg21, SIZE, ispositive=True)
+    
+    dataset=d1
+    dataset=dataset.concatenate(d2)
+    print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
+    tf.data.experimental.save(dataset, "synthetic/len_effect2")
+
+
+if True: # four sequences: 0, 1, 2, 3
+    SIZE=20000 
+    p1 = [0.3, 0.2, 0.3, 0.2]
+    deg11 = create_leaf(p1)
+    d1 = one2many("input", deg11, SIZE, ispositive=True)
+    dataset=d1
+    print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
+    tf.data.experimental.save(dataset, "synthetic/len_effect3")
+
+if True: # 1 sequence: 0
+    SIZE=20000 
+    p1 = [0.0, 0.0, 0.0, 0.0]
+    deg11 = create_leaf(p1)
+    d1 = one2many("input", deg11, SIZE, ispositive=True)
+    dataset=d1
+    print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
+    tf.data.experimental.save(dataset, "synthetic/len_effect4")

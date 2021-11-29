@@ -6,7 +6,7 @@ import time
 
 import util
 import query
-from rule import Rule, Variable, Constant
+from rule import Rule, Variable, Constant, StringFromCols
 import tensorflow as tf
 
 class MappingProblem:
@@ -49,6 +49,7 @@ class MappingProblem:
         for p in self.true_mapping:
             self.rules.append(Rule([[p, Variable(1)], [p+"_pred1a", Variable(1)]], self.cursor, self.preds))
             self.rules.append(Rule([[p, Variable(1)], [p+"_pred2a", Variable(1), Constant(p+"_const2a")]], self.cursor, self.preds))
+            self.rules.append(Rule([[p, Variable(1)], [StringFromCols(p+"_sfc3a"), Variable(1)]], self.cursor, self.preds))
 
             self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred3a", Variable(1), Variable(2)]], self.cursor, self.preds))
             self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred4a", Variable(1), Variable(2)], [p+"_pred4b", Variable(1)]], self.cursor, self.preds))

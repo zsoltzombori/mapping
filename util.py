@@ -7,6 +7,7 @@ import pandas as pd
 import random
 import datetime
 import decimal
+import random
 
 # parse db configurations from file
 def config(filename='database.ini', section='postgresql'):
@@ -94,7 +95,7 @@ def schema_constants(cursor, schema, allowed_types=None):
         cursor.execute(s)
         result2 = cursor.fetchall()
         result2 = [r[0] for r in result2]
-        result2 = list(set(result2))
+        result2 = list(filter(None,set(result2)))
 
         if dtype not in constants:
             constants[dtype] = []
@@ -186,8 +187,10 @@ def groupby_max(rows, max_index):
     
 
 # collect all table/column pairs and table/column1/column2 triples
+# also return a dict that maps all tables to column/type pair list
 def db2preds(cursor, schema, allowed_types=None):
     cursor.execute("select table_name, column_name, data_type from information_schema.columns where table_schema=%s", (schema,))
+    tables = {}
     unaries = {}
     binaries = {}
     result = cursor.fetchall()
@@ -195,6 +198,11 @@ def db2preds(cursor, schema, allowed_types=None):
         table1 = r1[0]
         column1 = r1[1]
         dtype1 = r1[2]
+
+        if table1 not in tables:
+            tables[table1] = []
+        tables[table1].append((column1, dtype1))
+        
         if allowed_types is not None and dtype1 not in allowed_types:
             continue
         if dtype1 not in unaries:
@@ -211,7 +219,7 @@ def db2preds(cursor, schema, allowed_types=None):
                 if (dtype1,dtype2) not in binaries:
                     binaries[(dtype1, dtype2)] = []                
                 binaries[(dtype1, dtype2)].append((r1, r2))
-    return {"unary": unaries, "binary": binaries}
+    return {"unary": unaries, "binary": binaries, "table": tables}
 
 def create_supervision(cursor, predicate, query, constants, rules, pos_size):
 
@@ -226,12 +234,14 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
         if None not in r:
             result_filtered.append(r)
     result = result_filtered
+    random.shuffle(result)
     
     pos_size = min(pos_size, len(result))
     pos_tuples = result[:pos_size]
     pos_mappings = []
     pos_targets = []
     for pt in pos_tuples: # collect proofs for each fact
+        print("pos fact: ", [predicate] + list(pt))
         for r in rules:
             pos_mappings_curr, pos_targets_curr = r.get_support([predicate] + list(pt))
             pos_targets += pos_targets_curr
@@ -266,6 +276,7 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
         else:
             # collect proofs for each negative fact
             neg_tuples.append(nt)
+            print("neg fact: ", [predicate] + list(nt))
             for r in rules:
                 neg_mappings_curr, neg_targets_curr = r.get_support([predicate] + list(nt))
                 neg_targets += neg_targets_curr
@@ -278,7 +289,8 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     return pos_mappings, pos_targets, neg_mappings, neg_targets
 
 def pred2name(pred):
-    return "|".join(pred)
+    # return "|".join(pred)
+    return " ".join(pred) + " PREDEND"
 
 def visualise_mapping_dict(mapping_dict):
     pred_dict = {}

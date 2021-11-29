@@ -204,7 +204,37 @@ cmt_mixed_mapping = {
     'hasConferenceMember': 'select cid, pid from person_conference;',
 }
 
+cmt2sigkdd_mapping = {
+    "Person": "select id from persons;",
+    "Author": "select id from persons where author=true;",
+    "Conference": "select id from conferences;",
+    "Document": "select id from documents;",
+    "Paper": "select id from papers where type=1;",
+    "Abstract": "select id from papers where type=2;",
+    "Review": "select id from reviews;",
+    'Program_Committee': 'select id from program_committees;',
+    'Program_Committee_member': 'select id from pc_members;',
+    'Program_Chair': 'select id from program_committee_chairs;',    
+    'name': 'select id, name from persons union (select id, name from conferences);',
+    'E-mail': 'select id, email from persons;',
+    'Start_of_conference': 'select id, date from conferences;',
+    'label': 'select id, label from program_committees;',
+    'hasTitle': 'select id, title from papers;',
+    'hasText': 'select id, comment from reviews;',
+    'submit': 'select author, id from papers union (select co_author, paper from co_write_paper);',
+}
 
-cmt_mapping = cmt_renamed_mapping
-cmt_schema = "cmt_renamed"
+npd_mapping = {
+    'dummy': "SELECT x FROM (SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/baa/', CAST(TABLE1.baaNpdidBsnsArrArea AS CHARACTER VARYING), '/licensee/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.baaLicenseeDateValidFrom AS CHARACTER VARYING), '/', CAST(TABLE1.baaLicenseeDateValidTo AS CHARACTER VARYING)) AS x FROM bsns_arr_area_licensee_hst TABLE1 WHERE TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.baaNpdidBsnsArrArea IS NOT NULL AND TABLE1.baaLicenseeDateValidFrom IS NOT NULL AND TABLE1.baaLicenseeDateValidTo IS NOT NULL) as T;",
+    'Agent': "SELECT x FROM (SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/baa/', CAST(TABLE1.baaNpdidBsnsArrArea AS CHARACTER VARYING), '/licensee/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.baaLicenseeDateValidFrom AS CHARACTER VARYING), '/', CAST(TABLE1.baaLicenseeDateValidTo AS CHARACTER VARYING)) AS x FROM bsns_arr_area_licensee_hst TABLE1 WHERE TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.baaNpdidBsnsArrArea IS NOT NULL AND TABLE1.baaLicenseeDateValidFrom IS NOT NULL AND TABLE1.baaLicenseeDateValidTo IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/field/', CAST(TABLE1.fldNpdidField AS CHARACTER VARYING), '/licensee/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.fldLicenseeFrom AS CHARACTER VARYING), '/', CAST(TABLE1.fldLicenseeTo AS CHARACTER VARYING)) AS x FROM field_licensee_hst TABLE1 WHERE TABLE1.fldLicenseeFrom IS NOT NULL AND TABLE1.fldLicenseeTo IS NOT NULL AND TABLE1.fldNpdidField IS NOT NULL AND TABLE1.cmpNpdidCompany IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/petreg/facility/', CAST(TABLE1.tufNpdidTuf AS CHARACTER VARYING), '/licencee/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING)) AS x FROM tuf_petreg_licence_licencee TABLE1 WHERE TABLE1.tufNpdidTuf IS NOT NULL AND TABLE1.cmpNpdidCompany IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/licence/', CAST(TABLE1.prlNpdidLicence AS CHARACTER VARYING), '/licensee/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.prlLicenseeDateValidFrom AS CHARACTER VARYING), '/', CAST(TABLE1.prlLicenseeDateValidTo AS CHARACTER VARYING)) AS x FROM licence_licensee_hst TABLE1 WHERE TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.prlNpdidLicence IS NOT NULL AND TABLE1.prlLicenseeDateValidFrom IS NOT NULL AND TABLE1.prlLicenseeDateValidTo IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/petreg/licence/', CAST(TABLE1.prlNpdidLicence AS CHARACTER VARYING), '/licencee/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING)) AS x FROM licence_petreg_licence_licencee TABLE1 WHERE TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.prlNpdidLicence IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/licence/', CAST(TABLE1.prlNpdidLicence AS CHARACTER VARYING), '/operator/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.prlOperDateValidFrom AS CHARACTER VARYING), '/', CAST(TABLE1.prlOperDateValidTo AS CHARACTER VARYING)) AS x FROM licence_oper_hst TABLE1 WHERE TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.prlNpdidLicence IS NOT NULL AND TABLE1.prlOperDateValidFrom IS NOT NULL AND TABLE1.prlOperDateValidTo IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/facility/', CAST(TABLE1.tufNpdidTuf AS CHARACTER VARYING), '/operator/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.tufOperDateValidFrom AS CHARACTER VARYING), '/', CAST(TABLE1.tufOperDateValidTo AS CHARACTER VARYING)) AS x FROM tuf_operator_hst TABLE1 WHERE TABLE1.tufOperDateValidTo IS NOT NULL AND TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.tufNpdidTuf IS NOT NULL AND TABLE1.tufOperDateValidFrom IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/field/', CAST(TABLE1.fldNpdidField AS CHARACTER VARYING), '/operator/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.fldOperatorFrom AS CHARACTER VARYING), '/', CAST(TABLE1.fldOperatorTo AS CHARACTER VARYING)) AS x FROM field_operator_hst TABLE1 WHERE TABLE1.fldOperatorTo IS NOT NULL AND TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.fldNpdidField IS NOT NULL AND TABLE1.fldOperatorFrom IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/field/', CAST(TABLE1.fldNpdidField AS CHARACTER VARYING), '/owner/', CAST(TABLE1.fldNpdidOwner AS CHARACTER VARYING), '/history/', CAST(TABLE1.fldOwnershipFromDate AS CHARACTER VARYING), '/', CAST(TABLE1.fldOwnershipToDate AS CHARACTER VARYING)) AS x FROM field_owner_hst TABLE1 WHERE TABLE1.fldOwnershipFromDate IS NOT NULL AND TABLE1.fldOwnershipToDate IS NOT NULL AND TABLE1.fldNpdidField IS NOT NULL AND TABLE1.fldNpdidOwner IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/facility/', CAST(TABLE1.tufNpdidTuf AS CHARACTER VARYING), '/owner/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING), '/history/', CAST(TABLE1.tufOwnerDateValidFrom AS CHARACTER VARYING), '/', CAST(TABLE1.tufOwnerDateValidTo AS CHARACTER VARYING)) AS x FROM tuf_owner_hst TABLE1 WHERE TABLE1.tufOwnerDateValidTo IS NOT NULL AND TABLE1.tufNpdidTuf IS NOT NULL AND TABLE1.cmpNpdidCompany IS NOT NULL AND TABLE1.tufOwnerDateValidFrom IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/licence/', CAST(TABLE1.prlNpdidLicence AS CHARACTER VARYING)) AS x FROM licence TABLE1 WHERE TABLE1.prlNpdidLicence IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/baa/', CAST(TABLE1.baaNpdidBsnsArrArea AS CHARACTER VARYING)) AS x FROM bsns_arr_area TABLE1 WHERE TABLE1.baaNpdidBsnsArrArea IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/company/', CAST(TABLE1.cmpNpdidCompany AS CHARACTER VARYING)) AS x FROM company TABLE1 WHERE TABLE1.cmpNpdidCompany IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/petreg/licence/', CAST(TABLE1.prlNpdidLicence AS CHARACTER VARYING)) AS x FROM licence_petreg_licence_oper TABLE1 WHERE TABLE1.prlNpdidLicence IS NOT NULL UNION ALL SELECT CONCAT('http://sws.ifi.uio.no/data/npd-v2/petreg/licence/', CAST(TABLE1.prlNpdidLicence AS CHARACTER VARYING)) AS x FROM licence_petreg_licence TABLE1 WHERE TABLE1.prlNpdidLicence IS NOT NULL) AS T",
+}
+
+
+
+
+
+cmt_mapping = cmt2sigkdd_mapping
+cmt_schema = 'cmt2sigkdd'
     
+npd_mapping = npd_mapping
+npd_schema = 'npd'

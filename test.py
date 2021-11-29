@@ -18,15 +18,20 @@ POS_SIZE=100
 
 true_mapping = supervision.cmt_mapping
 true_schema = supervision.cmt_schema
+true_mapping = supervision.npd_mapping
+true_schema = supervision.npd_schema
 
 schemas = (
-    "cmt_renamed",
-    "cmt_structured",
-    "cmt_structured_ci",
-    "cmt_naive",
-    "cmt_naive_ci",
-    "cmt_denormalized",
-    "cmt_mixed",
+    # "cmt_renamed",
+    # "cmt_structured",
+    # "cmt_structured_ci",
+    # "cmt_naive",
+    # "cmt_naive_ci",
+    # "cmt_denormalized",
+    # "cmt_mixed",
+    # "cmt2sigkdd",
+    # "cmt2conference",
+    "npd",
 )
 
 for schema in schemas:

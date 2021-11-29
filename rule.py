@@ -11,6 +11,85 @@ class Constant:
     def __init__(self, number):
         self.n = number
 
+class StringFromCols:
+    def __init__(self, number):
+        self.n = number
+
+    def find_split(self, text, columns, row):
+        matches = []
+        for v, column in zip(row, columns):
+            if v is None:
+                continue
+            index = text.find(v)
+
+            if index >= 0:
+                # we assume that a match is delimited by '/' characters TODO reconsider
+                if index > 0 and text[index-1] != '/':
+                    continue
+                elif (index + len(v) < len(text)) and text[index+len(v)] != '/':
+                    continue
+                else:
+                    matches.append((index, len(v), column, v))
+        matches.sort()
+
+        result_cols = []
+        result_vals = []
+        match_count = 0
+        curr_index = 0
+        for m in matches:
+            if m[0] < curr_index:
+                continue
+            
+            if m[0] > curr_index: # there is some padding
+                padding = text[curr_index:m[0]]
+                result_cols.append(padding)
+                result_vals.append(padding)
+                
+            result_cols.append(m[2])
+            result_vals.append(m[3])
+            match_count += 1
+            curr_index = m[0] + m[1]
+
+        if curr_index < len(text)-1: # paddding at the end
+            padding = text[curr_index:]
+            result_cols.append(padding)
+            result_vals.append(padding)            
+        
+        return match_count, tuple(result_cols), tuple(result_vals)
+        
+            
+    def align(self, text, cursor, tables):
+        matches = []
+        for table in tables:
+            columns = tables[table]
+            columns = [c[0] for c in columns]
+            colstrings = ["CAST({} as CHARACTER VARYING)".format(c) for c in columns]
+            sql = "select distinct {} from {};".format(", ".join(colstrings), table)
+            cursor.execute(sql)
+            result = cursor.fetchall()
+            duplicate_checker = {}
+            matches_for_table = []
+            best_count = 0
+            for r in result:
+                match = self.find_split(text, columns, r)
+                if match not in duplicate_checker:
+                    duplicate_checker[match] = True
+                    match_count, matched_cols, matched_vals = match
+                    best_count = max(best_count, match_count)
+                    if match_count == best_count and match_count >=2:
+                        matches_for_table.append((match_count, table, matched_cols, matched_vals))
+
+            matches_for_table.sort(reverse=True)
+            for cnt, table, cols, vals in matches_for_table:
+                if cnt < best_count:
+                    break
+                cols = list(cols)
+                cols.insert(0, table)
+                matches.append((self.n, cols, vals))
+        return matches
+
+    
+
 # an atom is a list
 # the first element is the predicate
 # subsequent elements are constants or Variables 
@@ -43,6 +122,11 @@ class Rule:
 
     def unifying_facts(self, atom):
         args = atom[1:]
+        if isinstance(atom[0], StringFromCols):
+            assert len(args) == 1
+            matches = atom[0].align(args[0], self.cursor, self.preds["table"])
+            return matches
+        
         if len(args) == 1: # unary predicate
             assert not isinstance(args[0], (Variable, Constant)), "Unary argument should not be variable/constant"
             targets = self.preds["unary"]

@@ -108,6 +108,7 @@ class Rule:
             return [], []
 
         subst = {}
+        # target = ["SOS"] + fact # TODO
         target = ["SOS", self.head[0]]
         for h_arg, f_arg in zip(self.head[1:], fact[1:]):
             if isinstance(h_arg, Variable):

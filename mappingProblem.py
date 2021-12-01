@@ -68,20 +68,36 @@ class MappingProblem:
             print("Mapping statistics for predicate ", predicate)
             util.visualise_mapping_dict({True:pos_mappings, False:neg_mappings})
 
-            d_input = ["SOS"] + [str(predicate)] + ["EOP","EOS"]
-            d_input = " ".join(d_input)
+            # d_input = ["SOS"] + [str(predicate)] + ["EOP","EOS"]
+            # d_input = " ".join(d_input)
+            
+            for targets, ispositive in zip((pos_targets, neg_targets), (True, False)):
+                for head in targets:
+                    d_input = "SOS " + head[0]
+                    for arg in head[1:]:
+                        a = arg.split()
+                        a = "_".join(a)
+                        d_input += " " + a
+                    d_input += " EOP EOS"
+                    target = targets[head]
+                    d_output = [str(x) for x in target]
+                    d_output = " ".join(d_output)
+                    # print(d_input)
+                    # print(d_output)
+                    # print("-----")
+                    dataset_elements.append((d_input, d_output, str(ispositive)))
 
-            for t in pos_targets:
-                d_output = [str(x) for x in t]
-                d_output = " ".join(d_output)
-                # print(d_output)
-                dataset_elements.append((d_input, d_output, str(True)))
+            # for t in pos_targets:
+            #     d_output = [str(x) for x in t]
+            #     d_output = " ".join(d_output)
+            #     # print(d_output)
+            #     dataset_elements.append((d_input, d_output, str(True)))
 
-            for t in neg_targets:
-                d_output = [str(x) for x in t]
-                d_output = " ".join(d_output)
-                # print(d_output)
-                dataset_elements.append((d_input, d_output, str(False)))
+            # for t in neg_targets:
+            #     d_output = [str(x) for x in t]
+            #     d_output = " ".join(d_output)
+            #     # print(d_output)
+            #     dataset_elements.append((d_input, d_output, str(False)))
                 
             curr_path = "{}/{}".format(path,predicate)
             dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)

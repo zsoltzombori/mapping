@@ -239,17 +239,19 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     pos_size = min(pos_size, len(result))
     pos_tuples = result[:pos_size]
     pos_mappings = []
-    pos_targets = []
+    pos_targets = {}
     for pt in pos_tuples: # collect proofs for each fact
-        print("pos fact: ", [predicate] + list(pt))
+        atom = tuple([predicate] + list(pt))
+        # print("pos fact: ", atom)
+        pos_targets[atom] = []
         for r in rules:
             pos_mappings_curr, pos_targets_curr = r.get_support([predicate] + list(pt))
-            pos_targets += pos_targets_curr
+            pos_targets[atom] += pos_targets_curr
             pos_mappings += pos_mappings_curr
 
     # create matching number of negative proofs
-    pos_targets_size = len(pos_targets)
-    if pos_targets_size == 0:
+    pos_mappings_size = len(pos_mappings)
+    if pos_mappings_size == 0:
         print("No positives found for predicate", predicate)
         return [], [], [], []
 
@@ -258,10 +260,10 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     supervision_types = [get_matching_types(r, sql_types) for r in result[0]]
 
     neg_mappings = []
-    neg_targets = []
+    neg_targets = {}
     neg_tuples = []
     attempts = 1000
-    while (len(neg_targets) < pos_targets_size) and attempts > 0:
+    while (len(neg_mappings) < pos_mappings_size) and attempts > 0:
         attempts -= 1
         # generate a random tuple of matching type
         nt = []
@@ -276,16 +278,15 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
         else:
             # collect proofs for each negative fact
             neg_tuples.append(nt)
-            print("neg fact: ", [predicate] + list(nt))
+            atom = tuple([predicate] + list(nt))
+            # print("neg fact: ", atom)
+            neg_targets[atom] = []
             for r in rules:
                 neg_mappings_curr, neg_targets_curr = r.get_support([predicate] + list(nt))
-                neg_targets += neg_targets_curr
+                neg_targets[atom] += neg_targets_curr
                 neg_mappings += neg_mappings_curr
 
-    neg_mappings = neg_mappings[:pos_targets_size]
-    neg_targets = neg_targets[:pos_targets_size]
-
-    print("Proofs generated for predicate {}: {} positives, {} negatives".format(predicate, len(pos_targets), len(neg_targets)))
+    print("Proofs generated for predicate {}: {}/{} positives, {}/{} negatives".format(predicate, len(pos_targets), len(pos_mappings), len(neg_targets), len(neg_mappings)))
     return pos_mappings, pos_targets, neg_mappings, neg_targets
 
 def pred2name(pred):

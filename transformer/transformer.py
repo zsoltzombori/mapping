@@ -36,23 +36,30 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 ##########################################
 
 def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
-  element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
-  examples = tf.data.experimental.load(datadir, element_spec=element_spec)
-  df_size = tf.data.experimental.cardinality(examples).numpy()
-  print("Dataset size: ", df_size)
 
-  train_size = int(split[0] * df_size)
-  val_size = int(split[1] * df_size)
-  test_size = int(split[2] * df_size)
+  element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}  
+  # element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
+  # examples = tf.data.experimental.load(datadir, element_spec=element_spec)
+  pos_examples = tf.data.experimental.load(datadir + "/pos", element_spec=element_spec)
+  neg_examples = tf.data.experimental.load(datadir + "/neg", element_spec=element_spec)
+
+  pos_size = tf.data.experimental.cardinality(pos_examples).numpy()
+  neg_size = tf.data.experimental.cardinality(neg_examples).numpy()
+  print("Dataset size: ", pos_size, neg_size)
+
+  # TODO SPLIT DATASET
+  # train_size = int(split[0] * df_size)
+  # val_size = int(split[1] * df_size)
+  # test_size = int(split[2] * df_size)
   
-  examples = examples.shuffle(buffer_size)
-  train_examples = examples.take(train_size)
-  train_examples = examples.take(df_size) # TODO remove this line
-  test_examples = examples.skip(train_size)
-  val_examples = test_examples.skip(val_size)
-  test_examples = test_examples.take(test_size)
+  # examples = examples.shuffle(buffer_size)
+  # train_examples = examples.take(train_size)
+  # train_examples = examples.take(df_size) # TODO remove this line
+  # test_examples = examples.skip(train_size)
+  # val_examples = test_examples.skip(val_size)
+  # test_examples = test_examples.take(test_size)
 
-  return (train_examples, val_examples, test_examples)
+  return (pos_examples, neg_examples)
 
 def create_tokenizer(vocab_size, max_seq_len, train_text):  
   int_vectorize_layer = TextVectorization(
@@ -63,14 +70,17 @@ def create_tokenizer(vocab_size, max_seq_len, train_text):
   int_vectorize_layer.adapt(train_text)
   return int_vectorize_layer
   
-def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size):
+def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, seq_len):
   def prepare_data(x):
-    text_in = tf.expand_dims(x[:,0], -1)
-    text_out = tf.expand_dims(x[:,1], -1)
+    text_in = tf.expand_dims(x["input"], -1)
+    text_out = tf.expand_dims(x["output"], -1)
     text_in = tokenizer_in(text_in)
-    text_out = tokenizer_out(text_out)
-    ispositive = tf.cast(tf.math.equal(x[:,2], "True"), tf.float32)
-    return text_in, text_out, ispositive
+
+    text_out_values = tokenizer_out(text_out.values)
+    text_out = tf.RaggedTensor.from_row_splits(text_out_values, text_out.row_splits)
+    text_out = text_out.to_tensor(default_value = 0)
+    # text_out = tf.map_fn(tokenizer_out, text_out, fn_output_signature=tf.TensorSpec(shape=[None, seq_len], dtype=tf.int64))
+    return text_in, text_out
   
   return (
     ds
@@ -457,7 +467,52 @@ def loss_function_selective(real, pred, ispositive, loss_type):
   loss = pos_loss + neg_loss
 
   return pos_loss, neg_loss, loss
-  
+
+def my_gather(x):
+    return tf.gather(x[0], x[1])
+
+def my_gather_list(x):
+    return tf.map_fn(my_gather, x, fn_output_signature=tf.float32)
+
+def my_gather_list_list(x):
+    return tf.map_fn(my_gather_list, x, fn_output_signature=tf.TensorSpec(shape=[None], dtype=tf.float32))
+
+
+def loss_function(real, pred, ispositive):
+    logprobs = pred - tf.math.reduce_logsumexp(pred, axis=-1, keepdims=True)
+    
+    # probs = tf.nn.softmax(pred)
+    # target_probs = tf.map_fn(my_gather_list_list, (probs, real), fn_output_signature=tf.TensorSpec(shape=[None,None], dtype=tf.float32))
+    target_logprobs = tf.map_fn(my_gather_list_list, (logprobs, real), fn_output_signature=tf.TensorSpec(shape=[None,None], dtype=tf.float32))
+    
+    mask_zero = tf.math.equal(real, 0)
+    mask_nonzero = tf.math.logical_not(mask_zero)
+    mask_zero = tf.cast(mask_zero, dtype=target_logprobs.dtype)
+    mask_nonzero = tf.cast(mask_nonzero, dtype=target_logprobs.dtype)
+
+    # replace padding element probs with 1 for multiplication
+    # target_probs *= mask_nonzero
+    # target_probs_padded = target_probs + mask_zero
+    # sequence_probs = tf.reduce_prod(target_probs_padded, axis=2)
+    target_logprobs *= mask_nonzero
+    sequence_logprobs = tf.reduce_sum(target_logprobs, axis=2)
+
+    # remove padding sequences
+    # mask_nonzero_sequence = tf.reduce_max(mask_nonzero, axis=2)
+    # sequence_probs *= mask_nonzero_sequence
+
+    # reduce probs for all supporting sequences
+    # sequence_probs_all = tf.reduce_sum(sequence_probs, axis=0)
+    sequence_logprobs_all = tf.math.reduce_logsumexp(sequence_logprobs, axis=0, keepdims=False)
+
+    if ispositive:
+        # loss = 1.0 - sequence_probs_all
+        loss = - sequence_logprobs_all
+    else:
+        # loss = sequence_probs_all
+        loss = sequence_logprobs_all
+    loss = tf.reduce_mean(loss)
+    return loss
 
 # def loss_function(real, pred, ispositive):
 #   pos_loss_ = loss_object(real, pred)
@@ -488,11 +543,6 @@ def loss_function_selective(real, pred, ispositive, loss_type):
 #   return pos_loss, neg_loss, loss
 
 
-# def my_gather(x):
-#   return tf.gather(x[0], x[1])
-
-# def my_gather_list(x):
-#   return tf.map_fn(my_gather, x, fn_output_signature=tf.float32)
 
 # loss_object2 = tf.keras.losses.BinaryCrossentropy(
 #     from_logits=True, reduction='none')
@@ -543,58 +593,66 @@ def accuracy_function(real, pred, ispositive):
 
 train_step_signature = [
   tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-  tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-  tf.TensorSpec(shape=(None, ), dtype=tf.float32),
-  tf.TensorSpec(shape=(), dtype=tf.float32),
+  tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
+  tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
 ]
 
 
-def train(epochs, transformer, optimizer, train_batches, loss_type, ckpt_manager=None):
+def train(epochs, transformer, optimizer, pos_batches, neg_batches, ckpt_manager=None):
 
-  # @tf.function(input_signature=train_step_signature)
-  def train_step(inp, tar, ispositive, loss_type):
-    tar_inp = tar[:, :-1]
-    tar_real = tar[:, 1:]
+    # @tf.function(input_signature=train_step_signature)
+    def train_step(inp, pos_tar, neg_tar):
+        pos_tar = tf.transpose(pos_tar, perm=[1,0,2])
+        neg_tar = tf.transpose(neg_tar, perm=[1,0,2])
+        pos_tar_real = pos_tar[:, :, 1:]
+        neg_tar_real = neg_tar[:, :, 1:]
 
-    with tf.GradientTape() as tape:
-      predictions, _ = transformer([inp, tar_inp],
-                                   training = True)
-      # pos_loss, neg_loss, loss = loss_function(tar_real, predictions, ispositive)
-      pos_loss, neg_loss, loss = loss_function_selective(tar_real, predictions, ispositive, loss_type)
-      # pos_loss, neg_loss, loss = tf.cond(tf.equal(loss_type, 0.0),
-      #                                    lambda: loss_function(tar_real, predictions, ispositive),
-      #                                    lambda: loss_function_selective(tar_real, predictions, ispositive, loss_type)
-      #                                    )
+        def get_prediction(tar):
+            tar_inp = tar[:, :-1]
+            predictions, _ = transformer([inp, tar_inp], training = True)
+            return predictions
+                
+        with tf.GradientTape() as tape:            
+            pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32))
+            neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32))
 
-    gradients = tape.gradient(loss, transformer.trainable_variables)
-    gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
-    optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+            pos_loss = loss_function(pos_tar_real, pos_predictions, ispositive=True)
+            neg_loss = loss_function(neg_tar_real, neg_predictions, ispositive=False)
+            loss = pos_loss + NEG_WEIGHT * neg_loss
 
-    train_loss(loss)
-    train_pos_loss(pos_loss)
-    train_neg_loss(neg_loss)
-    train_accuracy(accuracy_function(tar_real, predictions, ispositive))
+        gradients = tape.gradient(loss, transformer.trainable_variables)
+        gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
+        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
-  train_step_ = tf.function(train_step, input_signature=train_step_signature)
+        train_loss(loss)
+        train_pos_loss(pos_loss)
+        train_neg_loss(neg_loss)
+        # train_accuracy(accuracy_function(tar_real, predictions, ispositive))
+        
+        return pos_predictions
+    
+    train_step_ = tf.function(train_step, input_signature=train_step_signature)
 
-  for epoch in range(epochs):
-    start = time.time()
-    train_loss.reset_states()
-    train_pos_loss.reset_states()
-    train_neg_loss.reset_states()
-    train_accuracy.reset_states()
+    for epoch in range(epochs):
+        start = time.time()
+        train_loss.reset_states()
+        train_pos_loss.reset_states()
+        train_neg_loss.reset_states()
 
-    for (batch, (inp, tar, ispositive)) in enumerate(train_batches):
-      train_step_(inp, tar, ispositive, loss_type)
+        for (batch, ((pos_inp, pos_tar), (neg_inp, neg_tar))) in enumerate(zip(pos_batches, neg_batches)):
+            if pos_inp.shape[0] != neg_inp.shape[0]:
+                break
+            train_step_(pos_inp, pos_tar, neg_tar)
+            print(f'{epoch}-{batch}: Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}')
+            
+            # if batch % 50 == 0:
+            #     print(f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
 
-      if batch % 50 == 0:
-        print(f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
+        # if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
+        #   ckpt_save_path = ckpt_manager.save()
+        #   print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
-      if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
-        ckpt_save_path = ckpt_manager.save()
-        print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
-
-    print(f'Epoch {epoch + 1}: Time {time.time() - start:.2f} secs, Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}, Accuracy {train_accuracy.result():.4f}')
+        print(f'Epoch {epoch + 1}: Time {time.time() - start:.2f} secs, Loss {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}')
 
 
 class Translator(tf.Module):

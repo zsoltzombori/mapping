@@ -1,7 +1,7 @@
 EPOCHS = 100
-BATCH_SIZE = 1024
-BEAMSIZE=100
-PARSE=True
+BATCH_SIZE = 10
+BEAMSIZE=50
+PARSE=False
 MIN_POSNEG_RATIO = 10
 
 # # divide GPUs, by randomly selecting one for each process
@@ -23,8 +23,8 @@ args = parser.parse_args()
 DATADIR = args.datadir
 
 # tokenizer parameters
-MAX_VOCAB_SIZE_IN = 1000
-MAX_VOCAB_SIZE_OUT = 20000
+MAX_VOCAB_SIZE_IN = 200000
+MAX_VOCAB_SIZE_OUT = 200000
 MAX_SEQUENCE_LENGTH_IN = 20
 MAX_SEQUENCE_LENGTH_OUT = 20
 
@@ -46,16 +46,27 @@ BUFFER_SIZE = 200000
 MAX_EVAL_LENGTH = 20
 
 # load data
-(train_examples, val_examples, test_examples) = transformer.load_data(DATADIR, BUFFER_SIZE)
-
+(pos_examples, neg_examples) = transformer.load_data(DATADIR, BUFFER_SIZE)
+                                         
 # create vectorizers
-train_text_in = train_examples.map(lambda x: x[0])
-train_text_out = train_examples.map(lambda x: x[1])
-tokenizer_in = transformer.create_tokenizer(MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, train_text_in)
-tokenizer_out = transformer.create_tokenizer(MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, train_text_out)
+pos_text_in = pos_examples.map(lambda x: x["input"])
+pos_text_out = pos_examples.map(lambda x: x["output"])
+neg_text_in = neg_examples.map(lambda x: x["input"])
+neg_text_out = neg_examples.map(lambda x: x["output"])
+text_in = pos_text_in.concatenate(neg_text_in)
+text_out = pos_text_out.concatenate(neg_text_out)
+
+tokenizer_in = transformer.create_tokenizer(MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, text_in)
+tokenizer_out = transformer.create_tokenizer(MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, text_out)
+
+print("Input vocab size: ", len(tokenizer_in.get_vocabulary()))
+print("Output vocab size: ", len(tokenizer_out.get_vocabulary()))
+
 
 # create batches of training data
-train_batches = transformer.make_batches(train_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE)
+pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, MAX_SEQUENCE_LENGTH_IN)
+neg_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, MAX_SEQUENCE_LENGTH_OUT)
+
 
 # create optimizer
 if LR_TYPE == "custom":
@@ -64,28 +75,22 @@ elif LR_TYPE == "decay":
   learning_rate = tf.keras.optimizers.schedules.ExponentialDecay(LR, decay_steps=10, decay_rate=0.9, staircase=True)
 else:
   learning_rate = LR
-pos_optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-neg_optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
 # create transformer
 vocab_size_in = len(tokenizer_in.get_vocabulary())
 vocab_size_out = len(tokenizer_out.get_vocabulary())
-pos_transformer = transformer.Transformer(
-    num_layers=NUM_LAYERS, d_model=D_MODEL,
-    num_heads=NUM_HEADS, dff=DFF,
-    input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
-    pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
-neg_transformer = transformer.Transformer(
-    num_layers=NUM_LAYERS, d_model=D_MODEL,
-    num_heads=NUM_HEADS, dff=DFF,
-    input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
-    pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
+my_transformer = transformer.Transformer(
+  num_layers=NUM_LAYERS, d_model=D_MODEL,
+  num_heads=NUM_HEADS, dff=DFF,
+  input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
+  pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
 
 
 if USE_CHECKPOINT:
   # TODO
   checkpoint_path = "./checkpoints/train"
-  ckpt = tf.train.Checkpoint(transformer=pos_transformer, optimizer=optimizer)
+  ckpt = tf.train.Checkpoint(transformer=my_transformer, optimizer=optimizer)
   ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
   # if a checkpoint exists, restore the latest checkpoint.
   if ckpt_manager.latest_checkpoint:
@@ -96,12 +101,10 @@ else:
 
 
 # train the transformer
-transformer.train(EPOCHS, pos_transformer, pos_optimizer, train_batches, loss_type=tf.constant(1.0), ckpt_manager=ckpt_manager)
-transformer.train(EPOCHS, neg_transformer, neg_optimizer, train_batches, loss_type=tf.constant(-1.0), ckpt_manager=ckpt_manager)
+transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, ckpt_manager=ckpt_manager)
 
 # create a translator
-pos_translator = transformer.Translator(tokenizer_in, tokenizer_out, pos_transformer)
-neg_translator = transformer.Translator(tokenizer_in, tokenizer_out, neg_transformer)
+my_translator = transformer.Translator(tokenizer_in, tokenizer_out, my_transformer)
 
 def print_translation(sentence, pred_tokens, ground_truth, ispositive):
   cnt = tf.size(pred_tokens).numpy()
@@ -118,7 +121,7 @@ def print_translation(sentence, pred_tokens, ground_truth, ispositive):
 def eval(examples, iterations=10):
   inputs = []
   for e in examples:
-    sentence = e[0]
+    sentence = e["input"]
     if sentence in inputs:
       continue
     else:
@@ -145,7 +148,7 @@ def eval(examples, iterations=10):
 def eval_beamsearch(translator, examples, beamsize, max_length, critique=None, min_posneg_ratio=1000):
   inputs = []
   for e in examples:
-    sentence = e[0]
+    sentence = e["input"]
     if sentence in inputs:
       continue
     else:
@@ -169,5 +172,5 @@ def eval_beamsearch(translator, examples, beamsize, max_length, critique=None, m
         print(f'{prob:.10f}: {text}')
 
 print("\n\nTRAIN")
-eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer, min_posneg_ratio=MIN_POSNEG_RATIO)
-# eval_beamsearch(neg_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=pos_transformer)
+# eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer, min_posneg_ratio=MIN_POSNEG_RATIO)
+eval_beamsearch(my_translator, pos_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)

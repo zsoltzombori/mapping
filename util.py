@@ -249,6 +249,10 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
             pos_targets[atom] += pos_targets_curr
             pos_mappings += pos_mappings_curr
 
+        if len(pos_targets[atom]) == 0:
+            del pos_targets[atom]
+
+
     # create matching number of negative proofs
     pos_mappings_size = len(pos_mappings)
     if pos_mappings_size == 0:
@@ -285,6 +289,9 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
                 neg_mappings_curr, neg_targets_curr = r.get_support([predicate] + list(nt))
                 neg_targets[atom] += neg_targets_curr
                 neg_mappings += neg_mappings_curr
+
+            if len(neg_targets[atom]) == 0:
+                del neg_targets[atom]
 
     print("Proofs generated for predicate {}: {}/{} positives, {}/{} negatives".format(predicate, len(pos_targets), len(pos_mappings), len(neg_targets), len(neg_mappings)))
     return pos_mappings, pos_targets, neg_mappings, neg_targets

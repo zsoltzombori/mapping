@@ -125,6 +125,10 @@ class Rule:
         args = atom[1:]
         if isinstance(atom[0], StringFromCols):
             assert len(args) == 1
+
+            if not isinstance(args[0], str):
+                return []
+
             matches = atom[0].align(args[0], self.cursor, self.preds["table"])
             return matches
         

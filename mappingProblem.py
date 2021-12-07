@@ -58,9 +58,12 @@ class MappingProblem:
             # self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
 
     def generate_data(self, samplesize, path):
-        all_dataset_elements = []
-        for predicate in self.true_mapping:
-            dataset_elements = []
+        elements = {
+            True: {"input": [], "output": []},
+            False: {"input": [], "output": []},
+        }
+        
+        for predicate in ("Author", ): #self.true_mapping:
             mapping_dict = {True:[], False:[]}
             query = self.true_mapping[predicate]
             pos_mappings, pos_targets, neg_mappings, neg_targets = util.create_supervision(self.true_cursor, predicate, query, self.constants, self.rules, samplesize)
@@ -75,38 +78,37 @@ class MappingProblem:
                 for head in targets:
                     d_input = "SOS " + head[0]
                     for arg in head[1:]:
-                        a = arg.split()
-                        a = "_".join(a)
-                        d_input += " " + a
+                        if isinstance(arg, str):
+                            arg = arg.split()
+                            arg = "_".join(arg)
+                        d_input = "{} {}".format(d_input, arg)
                     d_input += " EOP EOS"
-                    target = targets[head]
-                    d_output = [str(x) for x in target]
-                    d_output = " ".join(d_output)
-                    # print(d_input)
-                    # print(d_output)
+                    target_list = targets[head]
+                    target_list = [[str(x) for x in target] for target in target_list]
+                    d_output = [" ".join(target) for target in target_list]
                     # print("-----")
-                    dataset_elements.append((d_input, d_output, str(ispositive)))
+                    # print(d_input)
+                    # [print(do) for do in d_output]
+                    # print("-----")
+                    elements[ispositive]["input"].append(d_input)
+                    elements[ispositive]["output"].append(d_output)
 
-            # for t in pos_targets:
-            #     d_output = [str(x) for x in t]
-            #     d_output = " ".join(d_output)
-            #     # print(d_output)
-            #     dataset_elements.append((d_input, d_output, str(True)))
-
-            # for t in neg_targets:
-            #     d_output = [str(x) for x in t]
-            #     d_output = " ".join(d_output)
-            #     # print(d_output)
-            #     dataset_elements.append((d_input, d_output, str(False)))
-                
-            curr_path = "{}/{}".format(path,predicate)
-            dataset = tf.data.Dataset.from_tensor_slices(dataset_elements)
-            tf.data.experimental.save(dataset, curr_path)
-            all_dataset_elements += dataset_elements
-
-        curr_path = "{}/all".format(path)
-        dataset = tf.data.Dataset.from_tensor_slices(all_dataset_elements)
-        tf.data.experimental.save(dataset, curr_path)
+        # for ispositive in (True, False):
+        #     print(ispositive)
+        #     for i, x in enumerate(elements[ispositive]["output"]):
+        #         print(i, x)
+                    
+        elements[True]["output"] = tf.ragged.stack(elements[True]["output"])        
+        elements[False]["output"] = tf.ragged.stack(elements[False]["output"])
+        
+        path_pos = "{}/pos".format(path)
+        path_neg = "{}/neg".format(path)
+        dataset_pos = tf.data.Dataset.from_tensor_slices(elements[True])
+        dataset_neg = tf.data.Dataset.from_tensor_slices(elements[False])
+        print("pos element spec:", dataset_pos.element_spec)
+        print("neg element spec:", dataset_neg.element_spec)
+        tf.data.experimental.save(dataset_pos, path_pos)
+        tf.data.experimental.save(dataset_neg, path_neg)
 
 
             

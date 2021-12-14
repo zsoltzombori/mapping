@@ -63,7 +63,13 @@ class MappingProblem:
             False: {"input": [], "output": []},
         }
         
-        for predicate in ("Author", ): #self.true_mapping:
+        for predicate in self.true_mapping:
+
+            elements_curr = {
+                True: {"input": [], "output": []},
+                False: {"input": [], "output": []},
+            }
+            
             mapping_dict = {True:[], False:[]}
             query = self.true_mapping[predicate]
             pos_mappings, pos_targets, neg_mappings, neg_targets = util.create_supervision(self.true_cursor, predicate, query, self.constants, self.rules, samplesize)
@@ -76,7 +82,7 @@ class MappingProblem:
             
             for targets, ispositive in zip((pos_targets, neg_targets), (True, False)):
                 for head in targets:
-                    d_input = "SOS " + head[0]
+                    d_input = "SOS " + head[0] + " PREDEND"
                     for arg in head[1:]:
                         if isinstance(arg, str):
                             arg = arg.split()
@@ -92,24 +98,30 @@ class MappingProblem:
                     # print("-----")
                     elements[ispositive]["input"].append(d_input)
                     elements[ispositive]["output"].append(d_output)
+                    elements_curr[ispositive]["input"].append(d_input)
+                    elements_curr[ispositive]["output"].append(d_output)
+
+            self.elements2file(elements_curr, "{}_{}".format(path, predicate))
 
         # for ispositive in (True, False):
         #     print(ispositive)
         #     for i, x in enumerate(elements[ispositive]["output"]):
         #         print(i, x)
-                    
-        elements[True]["output"] = tf.ragged.stack(elements[True]["output"])        
-        elements[False]["output"] = tf.ragged.stack(elements[False]["output"])
-        
+
+        self.elements2file(elements, path)
+
+    def elements2file(self, elements, path):        
         path_pos = "{}/pos".format(path)
         path_neg = "{}/neg".format(path)
-        dataset_pos = tf.data.Dataset.from_tensor_slices(elements[True])
-        dataset_neg = tf.data.Dataset.from_tensor_slices(elements[False])
-        print("pos element spec:", dataset_pos.element_spec)
-        print("neg element spec:", dataset_neg.element_spec)
-        tf.data.experimental.save(dataset_pos, path_pos)
-        tf.data.experimental.save(dataset_neg, path_neg)
 
+        for ispositive, p in zip((True, False), (path_pos, path_neg)):
+            if len(elements[ispositive]["output"]) > 0:
+                elements[ispositive]["output"] = tf.ragged.stack(elements[ispositive]["output"])
+                dataset = tf.data.Dataset.from_tensor_slices(elements[ispositive])
+                print("Element spec for {} {}:{}".format(p, ispositive, dataset.element_spec))
+                tf.data.experimental.save(dataset, p)
+            else:
+                print("Empty elements for {} {}".format(p, ispositive))        
 
             
 

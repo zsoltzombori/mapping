@@ -120,11 +120,11 @@ if False:
     d1 = one2many("input", deg11, SIZE, ispositive=True)
     d2 = one2many("input", deg12, SIZE, ispositive=False)
     dataset=d1
-    dataset=dataset.concatenate(d2)
+    datasejt=dataset.concatenate(d2)
     print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
     tf.data.experimental.save(dataset, "synthetic/len1_neg")
 
-if True: # four sequences: 0, 1, 23, 24
+if False: # four sequences: 0, 1, 23, 24
     SIZE=10000
     deg11 = create_leaf([0.6, 0.4, 0, 0, 0])
     d1 = one2many("input", deg11, SIZE, ispositive=True)
@@ -138,7 +138,7 @@ if True: # four sequences: 0, 1, 23, 24
     print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
     tf.data.experimental.save(dataset, "synthetic/len_effect1")
 
-if True: # four sequences: 0, 1, 20, 21
+if False: # four sequences: 0, 1, 20, 21
     SIZE=10000
     deg11 = create_leaf([0.6, 0.4, 0, 0, 0])
     d1 = one2many("input", deg11, SIZE, ispositive=True)
@@ -152,7 +152,7 @@ if True: # four sequences: 0, 1, 20, 21
     tf.data.experimental.save(dataset, "synthetic/len_effect2")
 
 
-if True: # four sequences: 0, 1, 2, 3
+if False: # four sequences: 0, 1, 2, 3
     SIZE=20000 
     p1 = [0.3, 0.2, 0.3, 0.2]
     deg11 = create_leaf(p1)
@@ -161,7 +161,7 @@ if True: # four sequences: 0, 1, 2, 3
     print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
     tf.data.experimental.save(dataset, "synthetic/len_effect3")
 
-if True: # 1 sequence: 0
+if False: # 1 sequence: 0
     SIZE=20000 
     p1 = [0.0, 0.0, 0.0, 0.0]
     deg11 = create_leaf(p1)
@@ -169,3 +169,38 @@ if True: # 1 sequence: 0
     dataset=d1
     print("Dataset size:", tf.data.experimental.cardinality(dataset).numpy())
     tf.data.experimental.save(dataset, "synthetic/len_effect4")
+
+if True:
+    # positives: 100 * [0, 1]
+    # negatives: 10 * [1, 2], 90 * [2]
+
+    d_input = "SOS input EOS"
+    p0 = "SOS 0 EOS"
+    p1 = "SOS 1 EOS"
+    p2 = "SOS 2 EOS"
+    d_output0 = [p0, p1]
+    d_output1 = [p1, p2]
+    d_output2 = [p2]
+    
+    elements = {
+        True: {"input": [], "output": []},
+        False: {"input": [], "output": []},
+    }
+
+    for _ in range(100):
+        elements[True]["input"].append(d_input)
+        elements[True]["output"].append(d_output0)
+    for _ in range(10):
+        elements[False]["input"].append(d_input)
+        elements[False]["output"].append(d_output1)
+    for _ in range(90):
+        elements[False]["input"].append(d_input)
+        elements[False]["output"].append(d_output2)
+
+    path_pos = "synthetic/select/pos"
+    path_neg = "synthetic/select/neg"
+    for ispositive, p in zip((True, False), (path_pos, path_neg)):
+        elements[ispositive]["output"] = tf.ragged.stack(elements[ispositive]["output"])
+        dataset = tf.data.Dataset.from_tensor_slices(elements[ispositive])
+        print("Element spec for {} {}:{}".format(p, ispositive, dataset.element_spec))
+        tf.data.experimental.save(dataset, p)

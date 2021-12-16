@@ -1,7 +1,3 @@
-EPOCHS = 200
-BATCH_SIZE = 20
-BEAMSIZE=30
-NEG_WEIGHT=5.0
 PARSE=True
 MIN_POSNEG_RATIO = 10
 
@@ -19,9 +15,17 @@ import tensorflow as tf
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--datadir', type=str, required=True)
+parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--batch_size', type=int, default=20)
+parser.add_argument('--neg_weight', type=float, default=5.0)
+parser.add_argument('--beamsize', type=int, default=30)
 args = parser.parse_args()
 
 DATADIR = args.datadir
+EPOCHS = args.epochs
+BATCH_SIZE=args.batch_size
+NEG_WEIGHT=args.neg_weight
+BEAMSIZE=args.beamsize
 
 # tokenizer parameters
 MAX_VOCAB_SIZE_IN = 200000
@@ -59,6 +63,7 @@ neg_text_in = neg_examples.map(lambda x: x["input"])
 neg_text_out = neg_examples.map(lambda x: x["output"])
 text_in = pos_text_in.concatenate(neg_text_in)
 text_out = pos_text_out.concatenate(neg_text_out)
+
 
 tokenizer_in = transformer.create_tokenizer(MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, text_in)
 tokenizer_out = transformer.create_tokenizer(MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, text_out)

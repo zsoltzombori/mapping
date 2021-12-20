@@ -23,6 +23,7 @@ parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--d_model', type=int, default=256)
 parser.add_argument('--checkpoint_path', type=str, default=None)
 parser.add_argument('--lr', type=float, default=0.001)
+parser.add_argument('--optimizer', type=str, default="sgd")
 
 args = parser.parse_args()
 
@@ -43,6 +44,7 @@ LR_TYPE="decay" #"custom"/"decay"/"plain"
 LR = args.lr
 DECAY_STEPS = 1000
 WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
+OPTIMIZER=args.optimizer
 
 # transformer parameters
 NUM_LAYERS = args.num_layers
@@ -91,9 +93,11 @@ elif LR_TYPE == "decay":
   learning_rate = tf.keras.optimizers.schedules.ExponentialDecay(LR, decay_steps=DECAY_STEPS, decay_rate=0.9, staircase=True)
 else:
   learning_rate = LR
-optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True)
-# optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-# optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate, momentum=0.0)
+
+if OPTIMIZER == "sgd":
+  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True)
+elif OPTIMIZER == "adam":
+  optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
 # create transformer
 vocab_size_in = len(tokenizer_in.get_vocabulary())

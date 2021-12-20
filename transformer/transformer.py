@@ -437,44 +437,6 @@ train_step_signature2 = [
 
 def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, ckpt_manager=None):
 
-    def train_step_pos(inp, tar):
-        tar = tf.transpose(pos_tar, perm=[1,0,2])
-        tar_real = tar[:, :, 1:]
-
-        def get_prediction(tar):
-            tar_inp = tar[:, :-1]
-            predictions, _ = transformer([inp, tar_inp], training = True)
-            return predictions
-                
-        with tf.GradientTape() as tape:            
-            predictions = tf.map_fn(get_prediction, tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            loss, probs = loss_function(tar_real, predictions, True)
-        gradients = tape.gradient(loss, transformer.trainable_variables)
-        # gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
-        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-        train_loss(loss)
-        train_pos_loss(loss)
-        train_pos_probs(probs)
-        
-    def train_step_neg(inp, tar):
-        tar = tf.transpose(pos_tar, perm=[1,0,2])
-        tar_real = tar[:, :, 1:]
-
-        def get_prediction(tar):
-            tar_inp = tar[:, :-1]
-            predictions, _ = transformer([inp, tar_inp], training = True)
-            return predictions
-                
-        with tf.GradientTape() as tape:            
-            predictions = tf.map_fn(get_prediction, tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            loss, probs = loss_function(tar_real, predictions, False)
-        gradients = tape.gradient(loss, transformer.trainable_variables)
-        # gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
-        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-        train_loss(loss)
-        train_neg_loss(loss)
-        train_neg_probs(probs)
-
     def train_step(inp, pos_tar, neg_tar):
         pos_tar = tf.transpose(pos_tar, perm=[1,0,2])
         neg_tar = tf.transpose(neg_tar, perm=[1,0,2])
@@ -510,12 +472,8 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
 
     if True:
         train_step_ = tf.function(train_step, input_signature=train_step_signature)
-        train_step_pos_ = tf.function(train_step_pos, input_signature=train_step_signature2)
-        train_step_neg_ = tf.function(train_step_neg, input_signature=train_step_signature2)
     else:
         train_step_ = train_step
-        train_step_pos_ = train_step_pos
-        train_step_neg_ = train_step_neg
 
 
     for epoch in range(epochs):
@@ -528,23 +486,14 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         
 
         for (batch, ((pos_inp, pos_tar), (neg_inp, neg_tar))) in enumerate(zip(pos_batches, neg_batches)):
-        # for (batch1, (pos_inp, pos_tar)) in enumerate(pos_batches):
-        #     for (batch2, (neg_inp, neg_tar)) in enumerate(neg_batches):
             if pos_inp.shape[0] != neg_inp.shape[0]:
-                break
-            
+                break            
             train_step_(pos_inp, pos_tar, neg_tar)
-            # train_step_pos_(pos_inp, pos_tar)
-            # show_loss(prefix="pos ")
-            # for _ in range(5):
-            #     train_step_neg_(pos_inp, neg_tar)
-            #     show_loss(prefix="    neg ")
-
         show_loss(epoch=epoch, start=start)                           
 
-        # if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
-        #   ckpt_save_path = ckpt_manager.save()
-        #   print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+        if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
+            ckpt_save_path = ckpt_manager.save()
+            print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
 def show_loss(epoch=None, batch=None,start=None, prefix=""):
     if epoch is not None:

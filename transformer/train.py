@@ -19,6 +19,11 @@ parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=20)
 parser.add_argument('--neg_weight', type=float, default=5.0)
 parser.add_argument('--beamsize', type=int, default=30)
+parser.add_argument('--num_layers', type=int, default=3)
+parser.add_argument('--d_model', type=int, default=256)
+parser.add_argument('--checkpoint_path', type=str, default=None)
+parser.add_argument('--lr', type=float, default=0.001)
+
 args = parser.parse_args()
 
 DATADIR = args.datadir
@@ -35,19 +40,19 @@ MAX_SEQUENCE_LENGTH_OUT = 20
 
 # optimizer parameters
 LR_TYPE="decay" #"custom"/"decay"/"plain"
-LR = 0.001
+LR = args.lr
 DECAY_STEPS = 1000
 WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
 
 # transformer parameters
-NUM_LAYERS = 3
-D_MODEL = 256
+NUM_LAYERS = args.num_layers
+D_MODEL = args.d_model
 DFF = 512
 NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
 # other
-USE_CHECKPOINT=False
+CHECKPOINT_PATH=args.checkpoint_path
 BUFFER_SIZE = 200000
 MAX_EVAL_LENGTH = 20
 
@@ -73,6 +78,9 @@ print("Output vocab size: ", len(tokenizer_out.get_vocabulary()))
 
 
 # create batches of training data
+pos_size = tf.data.experimental.cardinality(pos_examples).numpy()
+neg_size = tf.data.experimental.cardinality(neg_examples).numpy()
+BATCH_SIZE = min(BATCH_SIZE, pos_size, neg_size)
 pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, MAX_SEQUENCE_LENGTH_IN)
 neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, MAX_SEQUENCE_LENGTH_OUT)
 
@@ -97,11 +105,9 @@ my_transformer = transformer.Transformer(
   pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
 
 
-if USE_CHECKPOINT:
-  # TODO
-  checkpoint_path = "./checkpoints/train"
+if CHECKPOINT_PATH is not None:
   ckpt = tf.train.Checkpoint(transformer=my_transformer, optimizer=optimizer)
-  ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+  ckpt_manager = tf.train.CheckpointManager(ckpt, CHECKPOINT_PATH, max_to_keep=5)
   # if a checkpoint exists, restore the latest checkpoint.
   if ckpt_manager.latest_checkpoint:
     ckpt.restore(ckpt_manager.latest_checkpoint)
@@ -166,8 +172,8 @@ def eval_beamsearch(translator, examples, beamsize, max_length, critique=None, m
       
     print("---------")
     print(f'{"Input:":15s}: {sentence.numpy()}')
-    for output in e["output"]:
-      print(f'{"   Output:":15s}: {output.numpy()}')
+    # for output in e["output"]:
+    #   print(f'{"   Output:":15s}: {output.numpy()}')
     if critique is not None:
       translations = translator.beamsearch_with_critique(tf.constant(sentence), critique, parse=PARSE, beamsize=beamsize, max_length=max_length)
       for (score, prob, prob_c, prob_hist, prob_c_hist, text) in translations[:10]:
@@ -184,7 +190,5 @@ def eval_beamsearch(translator, examples, beamsize, max_length, critique=None, m
         print(f'{prob:.10f}: {text}')
 
 print("\n\nTRAIN")
-# eval_beamsearch(pos_translator, train_examples, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=neg_transformer, min_posneg_ratio=MIN_POSNEG_RATIO)
-eval_beamsearch(my_translator, pos_examples.shuffle(BUFFER_SIZE).take(100), beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
-# print("NNNNNNNNNNNNNEEEEEEEEGGGGGGGGG")
-# eval_beamsearch(my_translator, neg_examples.take(10), beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
+eval_beamsearch(my_translator, pos_examples.shuffle(BUFFER_SIZE).take(10), beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
+

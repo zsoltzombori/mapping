@@ -1,6 +1,3 @@
-PARSE=True
-MIN_POSNEG_RATIO = 10
-
 # # divide GPUs, by randomly selecting one for each process
 # import os
 # import numpy as np
@@ -10,6 +7,8 @@ MIN_POSNEG_RATIO = 10
 # os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
 
+import time
+import sys
 import transformer
 import tensorflow as tf
 import argparse
@@ -18,7 +17,7 @@ parser.add_argument('--datadir', type=str, required=True)
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=20)
 parser.add_argument('--neg_weight', type=float, default=5.0)
-parser.add_argument('--beamsize', type=int, default=30)
+parser.add_argument('--beamsize', type=int, default=10)
 parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--d_model', type=int, default=256)
 parser.add_argument('--checkpoint_path', type=str, default=None)
@@ -59,9 +58,9 @@ BUFFER_SIZE = 200000
 MAX_EVAL_LENGTH = 20
 
 # load data
-(pos_examples, neg_examples) = transformer.load_data(DATADIR, BUFFER_SIZE)
-# pos_examples = pos_examples.take(1)
-# neg_examples = neg_examples.take(1)
+(pos_examples, neg_examples) = transformer.load_data(DATADIR)
+pos_examples, pos_examples_val, pos_examples_test = pos_examples
+neg_examples, neg_examples_val, neg_examples_test = neg_examples
 
 # create vectorizers
 pos_text_in = pos_examples.map(lambda x: x["input"])
@@ -138,61 +137,83 @@ def print_translation(sentence, pred_tokens, ground_truth, ispositive):
   print(f'{"Positive":15s}: {ispositive.numpy()}')
 
 
-def eval(examples, iterations=10):
-  inputs = []
-  for e in examples:
+# def eval(examples, iterations=10):
+#   inputs = []
+#   for e in examples:
+#     sentence = e["input"]
+#     if sentence in inputs:
+#       continue
+#     else:
+#       inputs.append(sentence)
+
+#     print("---------")
+#     print(f'{"Input:":15s}: {sentence.numpy()}')
+#     outputs = []
+#     for i in range(iterations):
+#       if i==0:
+#         deterministic=True
+#       else:
+#         deterministic=False
+#       pred_tokens, probs = my_translator(tf.constant(sentence), deterministic=deterministic)
+#       prob = np.prod(probs)
+#       text = tf.strings.reduce_join(pred_tokens, separator=' ').numpy()
+#       outputs.append((prob, text))
+#     outputs = sorted(outputs, reverse=True)
+#     for (prob, text) in outputs:
+#       print(f'{prob:.10f}: {text}')
+
+
+def safe_rule(rule, neg_examples):
+  for e in neg_examples:
+    candidates = [c.numpy().decode("utf-8") for c in e["output"]]
+    return not rule in candidates
+
+def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length):
+  t0 = time.time()
+  threshold = 0.1
+  
+  pos_success = 0
+  neg_failure = 0
+  count = 0
+  for e in pos_examples:
+    count += 1
     sentence = e["input"]
-    if sentence in inputs:
-      continue
+    translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
+    candidates = [c.numpy().decode("utf-8") for c in e["output"]]
+    
+    pos_prob = 0.0
+    neg_prob = 0.0
+    firstrule=None
+    for (prob, text, isvalid, rule) in translations:
+      if isvalid:
+        if firstrule is None:
+          firstrule = rule
+        if text in candidates:
+          pos_prob += prob
+        if not safe_rule(text, neg_examples):
+          neg_prob += prob
+
+    failure = False
+    if pos_prob > 1-threshold:
+      pos_success += 1
     else:
-      inputs.append(sentence)
+      failure = True
+    if neg_prob > threshold:
+      neg_failure += 1
+      failure = True
 
-    print("---------")
-    print(f'{"Input:":15s}: {sentence.numpy()}')
-    outputs = []
-    for i in range(iterations):
-      if i==0:
-        deterministic=True
-      else:
-        deterministic=False
-      pred_tokens, probs = my_translator(tf.constant(sentence), deterministic=deterministic)
-      prob = np.prod(probs)
-      text = tf.strings.reduce_join(pred_tokens, separator=' ').numpy()
-      outputs.append((prob, text))
-    outputs = sorted(outputs, reverse=True)
-    for (prob, text) in outputs:
-      print(f'{prob:.10f}: {text}')
+    print(count)
+    if failure:
+      print("---------FAILURE----------")
+      print(f'{"Input:":15s}: {sentence.numpy()}')
+      print(f'{firstrule}')
+      print(f'Pos prob: {pos_prob:.3f}, Neg prob: {neg_prob:.3f}')
+    sys.stdout.flush()
 
+  t1 = time.time()
+  print("Evaltime: {:.2f} sec, positive success ratio: {}, negative failure ratio: {}".format(t1-t0, pos_success / count, neg_failure / count))
 
-
-def eval_beamsearch(translator, examples, beamsize, max_length, critique=None, min_posneg_ratio=1000):
-  inputs = []
-  for e in examples:
-    sentence = e["input"]
-    if sentence in inputs:
-      continue
-    else:
-      inputs.append(sentence)
-      
-    print("---------")
-    print(f'{"Input:":15s}: {sentence.numpy()}')
-    # for output in e["output"]:
-    #   print(f'{"   Output:":15s}: {output.numpy()}')
-    if critique is not None:
-      translations = translator.beamsearch_with_critique(tf.constant(sentence), critique, parse=PARSE, beamsize=beamsize, max_length=max_length)
-      for (score, prob, prob_c, prob_hist, prob_c_hist, text) in translations[:10]:
-        if (prob / prob_c) < min_posneg_ratio: # not enough separation between pos and neg probs
-          padding="     "
-        else:
-          padding=""
-        print(f'{padding}{score:.4f} - {prob:.4f} - {prob_c:.6f}: {text}')
-        # print("----> ", [p.numpy() for p in prob_hist])
-        # print("----> ", [p.numpy() for p in prob_c_hist])
-    else:
-      translations = translator.beamsearch(tf.constant(sentence), parse=PARSE, beamsize=beamsize, max_length=max_length)
-      for (prob, text) in translations[:10]:
-        print(f'{prob:.10f}: {text}')
-
-print("\n\nTRAIN")
-eval_beamsearch(my_translator, pos_examples.shuffle(BUFFER_SIZE).take(10), beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH, critique=None)
+print("\n\nEVALUATION")
+neg_examples_val = neg_examples.concatenate(neg_examples_val)
+eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH)
 

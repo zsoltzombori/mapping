@@ -1,6 +1,6 @@
 exp=1
 schema=cmt_renamed
-epochs=500
+epochs=200
 batch_size=12
 neg_weight=3.0
 num_layers=2

@@ -1,6 +1,5 @@
 # parent: exp1
 # neg_weight 3.0 -> 0.0
-# epochs 500 -> 200
 
 exp=2
 schema=cmt_renamed

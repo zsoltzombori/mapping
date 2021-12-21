@@ -36,31 +36,30 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 ##########################################
 
-def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
+def load_data(datadir, split=(0.7, 0.15, 0.15)):
+    element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
+    result = []
+    
+    for example_type in ("pos", "neg"):
+        examples = tf.data.experimental.load(datadir + "/" + example_type, element_spec=element_spec)
+        size = tf.data.experimental.cardinality(examples).numpy()
 
-  element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}  
-  # element_spec = tf.TensorSpec(shape=(3,), dtype=tf.string, name=None)
-  # examples = tf.data.experimental.load(datadir, element_spec=element_spec)
-  pos_examples = tf.data.experimental.load(datadir + "/pos", element_spec=element_spec)
-  neg_examples = tf.data.experimental.load(datadir + "/neg", element_spec=element_spec)
-
-  pos_size = tf.data.experimental.cardinality(pos_examples).numpy()
-  neg_size = tf.data.experimental.cardinality(neg_examples).numpy()
-  print("Dataset size: ", pos_size, neg_size)
-
-  # TODO SPLIT DATASET
-  # train_size = int(split[0] * df_size)
-  # val_size = int(split[1] * df_size)
-  # test_size = int(split[2] * df_size)
+        train_size = int(split[0] * size)
+        val_size = int(split[1] * size)
+        test_size = int(split[2] * size)
   
-  # examples = examples.shuffle(buffer_size)
-  # train_examples = examples.take(train_size)
-  # train_examples = examples.take(df_size) # TODO remove this line
-  # test_examples = examples.skip(train_size)
-  # val_examples = test_examples.skip(val_size)
-  # test_examples = test_examples.take(test_size)
+        train_examples = examples.take(train_size)
+        test_examples = examples.skip(train_size)
+        val_examples = test_examples.skip(test_size)
+        test_examples = test_examples.take(test_size)
 
-  return (pos_examples, neg_examples)
+        trains = tf.data.experimental.cardinality(train_examples).numpy()
+        vals = tf.data.experimental.cardinality(val_examples).numpy()
+        tests = tf.data.experimental.cardinality(test_examples).numpy()
+
+        print(example_type, "sizes: ", trains, vals, tests)
+        result.append((train_examples, val_examples, test_examples))
+    return result
 
 def create_tokenizer(vocab_size, max_seq_len, train_text):  
   int_vectorize_layer = TextVectorization(
@@ -503,7 +502,7 @@ def show_loss(epoch=None, batch=None,start=None, prefix=""):
     if start is not None:
         prefix += " Time {:.2f} sec".format(time.time()-start)
     # prefix += f' {train_loss.result():.4f}'
-    print(f'{prefix} {train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}, Probs {train_pos_probs.result():.8f}/{train_neg_probs.result():.8f}')
+    print(f'{prefix} {train_loss.result():.4f}/{train_pos_loss.result():.4f}/{train_neg_loss.result():.4f}, Probs {train_pos_probs.result():.8f}/{train_neg_probs.result():.8f}')
     sys.stdout.flush()
     
 
@@ -569,7 +568,7 @@ class Translator(tf.Module):
     return tokens, probs
 
 
-  def beamsearch(self, sentence, parse=True, max_length=20, beamsize=10):
+  def beamsearch(self, sentence, max_length=20, beamsize=10):
     assert isinstance(sentence, tf.Tensor)
     if len(sentence.shape) == 0:
       sentence = sentence[tf.newaxis]
@@ -645,13 +644,9 @@ class Translator(tf.Module):
       tokens = tf.gather(self.vocab_out, output)
       tokens = tokens[0].numpy()
       tokens = [t.decode('UTF-8') for t in tokens]
-      if parse:
-        rule, isvalid = parse_rule(tokens)
-        if isvalid:
-          result.append((prob, rule))
-      else:
-        result.append((prob, " ".join(tokens)))
 
+      rule, isvalid = parse_rule(tokens)
+      result.append((prob, " ".join(tokens), isvalid, rule))
     return result
 
   def beamsearch_with_critique(self, sentence, critique, parse=True, max_length=20, beamsize=10):

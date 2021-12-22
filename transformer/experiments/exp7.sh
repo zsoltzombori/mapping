@@ -1,16 +1,15 @@
-# parent exp1
-# epochs 500 -> 200
-# optimizer sgd -> adam
+# parent exp5
+# d_model: 512 -> 1024
+# batch_size 20 -> 10
 
 exp=7
 schema=cmt_renamed
-epochs=500
-batch_size=12
+epochs=100
+batch_size=10
 neg_weight=3.0
-num_layers=2
-d_model=512
+num_layers=4
+d_model=1024
 lr=0.001
-optimizer=adam
 GPU=5
 
 echo "Schema $schema"
@@ -21,7 +20,7 @@ datadir="outdata/${schema}"
 outdir="out/exp${exp}"
 mkdir -p $outdir
 
-CMD="CUDA_VISIBLE_DEVICES=$GPU nohup python train.py --datadir $datadir --epochs $epochs --batch_size ${batch_size} --neg_weight ${neg_weight} --num_layers ${num_layers} --d_model ${d_model} --lr ${lr} --optimizer $optimizer  --checkpoint_path ${checkpoint_dir}  > $outdir/${schema}.cout 2> $outdir/${schema}.cerr &"
+CMD="CUDA_VISIBLE_DEVICES=$GPU nohup python train.py --datadir $datadir --epochs $epochs --batch_size ${batch_size} --neg_weight ${neg_weight} --num_layers ${num_layers} --d_model ${d_model} --lr ${lr}   --checkpoint_path ${checkpoint_dir}  > $outdir/${schema}.cout 2> $outdir/${schema}.cerr &"
 echo $CMD
 eval $CMD
 

@@ -1,14 +1,14 @@
-# parent: exp2
-# lr 0.001 -> 0.0005
+# parent: exp5
+# d_model: 512 -> 256
 
 exp=6
 schema=cmt_renamed
-epochs=200
-batch_size=12
-neg_weight=0.0
-num_layers=2
-d_model=512
-lr=0.0005
+epochs=100
+batch_size=20
+neg_weight=3.0
+num_layers=4
+d_model=256
+lr=0.001
 GPU=6
 
 echo "Schema $schema"

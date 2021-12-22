@@ -1,16 +1,17 @@
-# parent: exp4
+# parent: exp1
 # epochs 50 -> 100
-# d_model 512 -> 256
+# num_layers 2 -> 4
+# batch_size 12 -> 20
 
 exp=5
 schema=cmt_renamed
-epochs=50
-batch_size=8
-neg_weight=0.0
-num_layers=3
-d_model=256
+epochs=100
+batch_size=20
+neg_weight=3.0
+num_layers=4
+d_model=512
 lr=0.001
-GPU=5
+GPU=7
 
 echo "Schema $schema"
 echo "GPU $GPU"

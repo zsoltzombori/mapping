@@ -60,6 +60,8 @@ CHECKPOINT_PATH=args.checkpoint_path
 BUFFER_SIZE = 200000
 MAX_EVAL_LENGTH = 20
 
+tf.random.set_seed(1000)
+
 # load data
 (pos_examples, neg_examples) = transformer.load_data(DATADIR, BUFFER_SIZE)
 pos_examples, pos_examples_val, pos_examples_test = pos_examples

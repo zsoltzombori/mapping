@@ -3,7 +3,7 @@
 
 exp=2
 schema=cmt_renamed
-epochs=200
+epochs=50
 batch_size=12
 neg_weight=0.0
 num_layers=2

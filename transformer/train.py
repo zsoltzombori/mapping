@@ -26,6 +26,9 @@ parser.add_argument('--optimizer', type=str, default="sgd")
 
 args = parser.parse_args()
 
+for arg in vars(args):
+  print(arg, getattr(args, arg))
+
 DATADIR = args.datadir
 EPOCHS = args.epochs
 BATCH_SIZE=args.batch_size
@@ -33,8 +36,8 @@ NEG_WEIGHT=args.neg_weight
 BEAMSIZE=args.beamsize
 
 # tokenizer parameters
-MAX_VOCAB_SIZE_IN = 200000
-MAX_VOCAB_SIZE_OUT = 200000
+MAX_VOCAB_SIZE_IN = 10000
+MAX_VOCAB_SIZE_OUT = 10000
 MAX_SEQUENCE_LENGTH_IN = 20
 MAX_SEQUENCE_LENGTH_OUT = 20
 
@@ -58,7 +61,7 @@ BUFFER_SIZE = 200000
 MAX_EVAL_LENGTH = 20
 
 # load data
-(pos_examples, neg_examples) = transformer.load_data(DATADIR)
+(pos_examples, neg_examples) = transformer.load_data(DATADIR, BUFFER_SIZE)
 pos_examples, pos_examples_val, pos_examples_test = pos_examples
 neg_examples, neg_examples_val, neg_examples_test = neg_examples
 
@@ -94,7 +97,7 @@ else:
   learning_rate = LR
 
 if OPTIMIZER == "sgd":
-  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=True)
+  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=False)
 elif OPTIMIZER == "adam":
   optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
@@ -104,7 +107,7 @@ vocab_size_out = len(tokenizer_out.get_vocabulary())
 my_transformer = transformer.Transformer(
   num_layers=NUM_LAYERS, d_model=D_MODEL,
   num_heads=NUM_HEADS, dff=DFF,
-  input_vocab_size=vocab_size_in, target_vocab_size=vocab_size_out,
+  input_vocab_size=MAX_VOCAB_SIZE_IN, target_vocab_size=MAX_VOCAB_SIZE_OUT,
   pe_input=1000, pe_target=1000, rate=DROPOUT_RATE)
 
 

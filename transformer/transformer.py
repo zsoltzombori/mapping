@@ -36,12 +36,13 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 ##########################################
 
-def load_data(datadir, split=(0.7, 0.15, 0.15)):
+def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
     element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
     result = []
     
     for example_type in ("pos", "neg"):
         examples = tf.data.experimental.load(datadir + "/" + example_type, element_spec=element_spec)
+        examples = examples.shuffle(buffer_size)
         size = tf.data.experimental.cardinality(examples).numpy()
 
         train_size = int(split[0] * size)

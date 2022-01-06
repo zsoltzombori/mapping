@@ -7,6 +7,7 @@ ENT_WEIGHT=0.0
 CLIP_NORM = 0.1
 
 LENGTH_PENALTY=0.5
+SUPPORT_SIZE=50
 
 import collections
 import logging
@@ -59,6 +60,15 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
         tests = tf.data.experimental.cardinality(test_examples).numpy()
 
         print(example_type, "sizes: ", trains, vals, tests)
+
+        max_shape = 0
+        for e in train_examples:
+            max_shape = max(max_shape, e["output"].shape[0])
+            print("------")
+            print(e["input"])
+            for o in e["output"]:
+                print("     ", o)
+        print("max support size: ", max_shape)
         result.append((train_examples, val_examples, test_examples))
     return result
 
@@ -71,6 +81,22 @@ def create_tokenizer(vocab_size, max_seq_len, train_text):
   int_vectorize_layer.adapt(train_text)
   return int_vectorize_layer
   
+def select_some(x):
+    x2 = tf.reduce_sum(x, axis=-1)
+    mask_zero = tf.cast(tf.math.equal(x2, 0), dtype=tf.float32)
+    logits = mask_zero * -1e10
+    z = -tf.math.log(-tf.math.log(tf.random.uniform(tf.shape(logits),0,1)))
+    gumbel = logits + z
+
+    if len(gumbel) > 0:
+        k = tf.minimum(SUPPORT_SIZE, len(gumbel))
+        values, indices = tf.nn.top_k(gumbel,k)    
+        result = tf.gather(x, indices)
+    else:
+        result = tf.constant([], dtype=x.dtype)
+    return result
+
+
 def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, seq_len):
   def prepare_data(x):
     text_in = tf.expand_dims(x["input"], -1)
@@ -80,6 +106,7 @@ def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, seq_l
     text_out_values = tokenizer_out(text_out.values)
     text_out = tf.RaggedTensor.from_row_splits(text_out_values, text_out.row_splits)
     text_out = text_out.to_tensor(default_value = 0)
+    text_out = tf.map_fn(select_some, text_out)
     # text_out = text_out[:,:1,:] # TODO
     # text_out = tf.map_fn(tokenizer_out, text_out, fn_output_signature=tf.TensorSpec(shape=[None, seq_len], dtype=tf.int64))
     return text_in, text_out

@@ -23,6 +23,9 @@ parser.add_argument('--d_model', type=int, default=256)
 parser.add_argument('--checkpoint_path', type=str, default=None)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--optimizer', type=str, default="sgd")
+parser.add_argument('--beta1', type=float, default=0.5)
+parser.add_argument('--beta2', type=float, default=0.999)
+
 
 args = parser.parse_args()
 
@@ -47,6 +50,8 @@ LR = args.lr
 DECAY_STEPS = 1000
 WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
 OPTIMIZER=args.optimizer
+BETA_1=args.beta1
+BETA_2=args.beta2
 
 # transformer parameters
 NUM_LAYERS = args.num_layers
@@ -99,9 +104,14 @@ else:
   learning_rate = LR
 
 if OPTIMIZER == "sgd":
-  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9, nesterov=False)
+  optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=BETA_1, nesterov=False)
 elif OPTIMIZER == "adam":
-  optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+  #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+  optimizer = tf.keras.optimizers.Adam(0.001, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
+elif OPTIMIZER == "nadam":
+  optimizer = tf.keras.optimizers.Nadam(LR, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
+elif OPTIMIZER == "adamax":
+  optimizer = tf.keras.optimizers.Adamax(LR, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
 
 # create transformer
 vocab_size_in = len(tokenizer_in.get_vocabulary())

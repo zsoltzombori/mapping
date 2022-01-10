@@ -25,6 +25,7 @@ parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--optimizer', type=str, default="sgd")
 parser.add_argument('--beta1', type=float, default=0.5)
 parser.add_argument('--beta2', type=float, default=0.999)
+parser.add_argument('--char_tokenizer', type=int, default=0)
 
 
 args = parser.parse_args()
@@ -39,10 +40,12 @@ NEG_WEIGHT=args.neg_weight
 BEAMSIZE=args.beamsize
 
 # tokenizer parameters
+CHAR_TOKENIZER = args.char_tokenizer == 1
 MAX_VOCAB_SIZE_IN = 10000
 MAX_VOCAB_SIZE_OUT = 10000
 MAX_SEQUENCE_LENGTH_IN = 20
 MAX_SEQUENCE_LENGTH_OUT = 20
+
 
 # optimizer parameters
 LR_TYPE="decay" #"custom"/"decay"/"plain"
@@ -63,14 +66,17 @@ DROPOUT_RATE = 0.1
 # other
 CHECKPOINT_PATH=args.checkpoint_path
 BUFFER_SIZE = 200000
-MAX_EVAL_LENGTH = 20
 
 tf.random.set_seed(1000)
 
 # load data
-(pos_examples, neg_examples) = transformer.load_data(DATADIR, BUFFER_SIZE)
+(pos_examples, neg_examples), max_input_len, max_output_len = transformer.load_data(DATADIR, BUFFER_SIZE)
 pos_examples, pos_examples_val, pos_examples_test = pos_examples
 neg_examples, neg_examples_val, neg_examples_test = neg_examples
+
+if CHAR_TOKENIZER:
+  MAX_SEQUENCE_LENGTH_IN = max_input_len
+  MAX_SEQUENCE_LENGTH_OUT = max_output_len
 
 # create vectorizers
 pos_text_in = pos_examples.map(lambda x: x["input"])
@@ -78,22 +84,22 @@ pos_text_out = pos_examples.map(lambda x: x["output"])
 neg_text_in = neg_examples.map(lambda x: x["input"])
 neg_text_out = neg_examples.map(lambda x: x["output"])
 text_in = pos_text_in.concatenate(neg_text_in)
-text_out = pos_text_out.concatenate(neg_text_out)
-
-
-tokenizer_in = transformer.create_tokenizer(MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, text_in)
-tokenizer_out = transformer.create_tokenizer(MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, text_out)
-
-print("Input vocab size: ", len(tokenizer_in.get_vocabulary()))
-print("Output vocab size: ", len(tokenizer_out.get_vocabulary()))
-
+text_out = pos_text_out.concatenate(neg_text_out)  
+tokenizer_in = transformer.MyTokenizer(text_in, MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, CHAR_TOKENIZER)
+tokenizer_out = transformer.MyTokenizer(text_out, MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, CHAR_TOKENIZER)
+  
+print("Input vocab size: ", len(tokenizer_in.vocabulary))
+# print(tokenizer_in.vocabulary)
+print("Output vocab size: ", len(tokenizer_out.vocabulary))
+# print(tokenizer_out.vocabulary)
 
 # create batches of training data
 pos_size = tf.data.experimental.cardinality(pos_examples).numpy()
 neg_size = tf.data.experimental.cardinality(neg_examples).numpy()
 BATCH_SIZE = min(BATCH_SIZE, pos_size, neg_size)
-pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, MAX_SEQUENCE_LENGTH_IN)
-neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, MAX_SEQUENCE_LENGTH_OUT)
+pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE)
+neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE)
+
 
 # create optimizer
 if LR_TYPE == "custom":
@@ -114,8 +120,8 @@ elif OPTIMIZER == "adamax":
   optimizer = tf.keras.optimizers.Adamax(LR, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
 
 # create transformer
-vocab_size_in = len(tokenizer_in.get_vocabulary())
-vocab_size_out = len(tokenizer_out.get_vocabulary())
+vocab_size_in = len(tokenizer_in.vocabulary)
+vocab_size_out = len(tokenizer_out.vocabulary)
 my_transformer = transformer.Transformer(
   num_layers=NUM_LAYERS, d_model=D_MODEL,
   num_heads=NUM_HEADS, dff=DFF,
@@ -195,6 +201,9 @@ def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length
     sentence = e["input"]
     translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
     candidates = [c.numpy().decode("utf-8") for c in e["output"]]
+    # print("translations", translations)
+    # print("candidates", candidates)
+    # aaa
     
     pos_prob = 0.0
     neg_prob = 0.0
@@ -230,5 +239,5 @@ def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length
 
 print("\n\nEVALUATION")
 neg_examples_val = neg_examples.concatenate(neg_examples_val)
-eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_EVAL_LENGTH)
+eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT)
 

@@ -40,7 +40,9 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
     element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
     result = []
-    
+
+    max_input_len = 0
+    max_output_len = 0
     for example_type in ("pos", "neg"):
         examples = tf.data.experimental.load(datadir + "/" + example_type, element_spec=element_spec)
         examples = examples.shuffle(buffer_size)
@@ -64,23 +66,60 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
         max_shape = 0
         for e in train_examples:
             max_shape = max(max_shape, e["output"].shape[0])
-            print("------")
-            print(e["input"])
+            # print("------")
+            lin = tf.strings.length(e["input"]).numpy()
+            max_input_len = max(max_input_len, lin)
             for o in e["output"]:
-                print("     ", o)
-        print("max support size: ", max_shape)
+                lout = tf.strings.length(o).numpy()
+                max_output_len = max(max_output_len, lout)
+        print("  max support size: ", max_shape)
         result.append((train_examples, val_examples, test_examples))
-    return result
+    print("  max input length: ", max_input_len)
+    print("  max output length: ", max_output_len)
+    return result, max_input_len, max_output_len
 
-def create_tokenizer(vocab_size, max_seq_len, train_text):  
-  int_vectorize_layer = TextVectorization(
-    max_tokens=vocab_size,
-    output_mode='int',
-    standardize=None,
-    output_sequence_length=max_seq_len)
-  int_vectorize_layer.adapt(train_text)
-  return int_vectorize_layer
-  
+def char_splitter(text):
+    return tf.strings.unicode_split(text, input_encoding="UTF-8")
+
+class MyTokenizer:
+    def __init__(self, train_text, vocab_size, max_seq_len, is_char_tokenizer):
+        if is_char_tokenizer:
+            split = char_splitter
+        else:
+            split = "whitespace"
+
+        self.tokenizer = TextVectorization(
+            max_tokens=vocab_size,
+            output_mode='int',
+            standardize=None,
+            split=split,
+            output_sequence_length=max_seq_len            
+        )
+        self.tokenizer.adapt(train_text)
+
+        if is_char_tokenizer:
+            vocab = ["SOS", "EOS", "PREDEND", "EOP", "EOH"] + self.tokenizer.get_vocabulary()[2:]
+            self.tokenizer.set_vocabulary(vocab)
+            
+        self.vocabulary = self.tokenizer.get_vocabulary() # list of strings
+
+        # seq_lens = train_text.map(lambda x: tf.shape(self.tokenizer(tf.expand_dims(x, -1)))[1])
+        # max_seq_len = seq_lens.reduce(0, lambda x, y: tf.math.maximum(x,y)).numpy()
+        # self.max_seq_len = int(max_seq_len)
+
+        # self.tokenizer2 = TextVectorization(
+        #     max_tokens=max_tokens,
+        #     output_mode='int',
+        #     standardize=None,
+        #     split=split,
+        #     output_sequence_length=self.max_seq_len,
+        #     vocabulary=self.vocabulary
+        # )
+
+    def __call__(self, arg):
+        return self.tokenizer(arg)
+
+    
 def select_some(x):
     x2 = tf.reduce_sum(x, axis=-1)
     mask_zero = tf.cast(tf.math.equal(x2, 0), dtype=tf.float32)
@@ -97,7 +136,7 @@ def select_some(x):
     return result
 
 
-def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, seq_len):
+def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size):
   def prepare_data(x):
     text_in = tf.expand_dims(x["input"], -1)
     text_out = tf.expand_dims(x["output"], -1)
@@ -107,8 +146,6 @@ def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, seq_l
     text_out = tf.RaggedTensor.from_row_splits(text_out_values, text_out.row_splits)
     text_out = text_out.to_tensor(default_value = 0)
     text_out = tf.map_fn(select_some, text_out)
-    # text_out = text_out[:,:1,:] # TODO
-    # text_out = tf.map_fn(tokenizer_out, text_out, fn_output_signature=tf.TensorSpec(shape=[None, seq_len], dtype=tf.int64))
     return text_in, text_out
   
   return (
@@ -539,9 +576,14 @@ class Translator(tf.Module):
     self.tokenizer_in = tokenizer_in
     self.tokenizer_out = tokenizer_out
     self.transformer = transf
-    self.vocab_out = self.tokenizer_out.get_vocabulary()
+    self.vocab_out = self.tokenizer_out.vocabulary
+    print(self.vocab_out[:20])
+    print(self.tokenizer_out.tokenizer.get_config())
 
+    
     start_end = self.tokenizer_out(['SOS EOS'])[0] # TODO this may have to be parameterised
+    # print("startend", start_end)
+
     self.start = start_end[0][tf.newaxis]
     self.end = start_end[1][tf.newaxis]
     
@@ -601,9 +643,8 @@ class Translator(tf.Module):
     if len(sentence.shape) == 0:
       sentence = sentence[tf.newaxis]
 
-    sentence = self.tokenizer_in(sentence)
-    encoder_input = sentence
-
+    encoder_input = self.tokenizer_in(sentence)
+    # print("input:", sentence, encoder_input)
     output_array = [self.start[0]]
 
     # list of top k output sequences
@@ -626,6 +667,12 @@ class Translator(tf.Module):
         break
 
       output = tf.convert_to_tensor([output_curr])
+
+      tokens = tf.gather(self.vocab_out, output)
+      tokens = tokens[0].numpy()
+      tokens = [t.decode('UTF-8') for t in tokens]
+      # print("top of stack: ", output.numpy(), tokens)
+      
       predictions, _ = self.transformer([encoder_input, output], training=False)
       predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)      
       predicted_probs = tf.nn.softmax(predictions)[0][0]

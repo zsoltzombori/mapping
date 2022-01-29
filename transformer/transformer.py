@@ -41,10 +41,13 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
     element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
     result = []
 
-    max_input_len = 0
-    max_output_len = 0
+    max_input_len_c = 0
+    max_output_len_c = 0
+    max_input_len_w = 0
+    max_output_len_w = 0
     for example_type in ("pos", "neg"):
         examples = tf.data.experimental.load(datadir + "/" + example_type, element_spec=element_spec)
+        
         examples = examples.shuffle(buffer_size)
         size = tf.data.experimental.cardinality(examples).numpy()
 
@@ -67,39 +70,52 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
         for e in train_examples:
             max_shape = max(max_shape, e["output"].shape[0])
             # print("------")
-            lin = tf.strings.length(e["input"]).numpy()
-            max_input_len = max(max_input_len, lin)
+            i = e["input"]
+            lin = tf.strings.length(i).numpy()
+            max_input_len_c = max(max_input_len_c, lin)
+            lin = len(tf.strings.split(i))
+            max_input_len_w = max(max_input_len_w, lin) 
             for o in e["output"]:
                 lout = tf.strings.length(o).numpy()
-                max_output_len = max(max_output_len, lout)
+                max_output_len_c = max(max_output_len_c, lout)
+                lout = len(tf.strings.split(o))
+                max_output_len_w = max(max_output_len_w, lout)
         print("  max support size: ", max_shape)
         result.append((train_examples, val_examples, test_examples))
-    print("  max input length: ", max_input_len)
-    print("  max output length: ", max_output_len)
-    return result, max_input_len, max_output_len
+    print("max input length: ", max_input_len_w, max_input_len_c)
+    print("max output length: ", max_output_len_w, max_input_len_c)
+    return result, int(max_input_len_w), int(max_input_len_c), int(max_output_len_w), int(max_output_len_c)
 
 def char_splitter(text):
-    return tf.strings.unicode_split(text, input_encoding="UTF-8")
+    return tf.strings.split(text,"/ ") 
+    # return tf.compat.v1.string_split(text,"/ ") 
+    # return re.split(r'/| ', text)
+    # return tf.py_function((lambda x: re.split(r'/| ', x)), [text], tf.string)
+    # return tf.strings.unicode_split(text, input_encoding="UTF-8")
 
 class MyTokenizer:
     def __init__(self, train_text, vocab_size, max_seq_len, is_char_tokenizer):
+
         if is_char_tokenizer:
             split = char_splitter
+            ngrams= 30
         else:
             split = "whitespace"
+            ngrams=None
 
         self.tokenizer = TextVectorization(
             max_tokens=vocab_size,
             output_mode='int',
+            ngrams=ngrams,
             standardize=None,
             split=split,
             output_sequence_length=max_seq_len            
         )
         self.tokenizer.adapt(train_text)
 
-        if is_char_tokenizer:
-            vocab = ["SOS", "EOS", "PREDEND", "EOP", "EOH"] + self.tokenizer.get_vocabulary()[2:]
-            self.tokenizer.set_vocabulary(vocab)
+        # if is_char_tokenizer:
+        #     vocab = ["SOS", "EOS", "PREDEND", "EOP", "EOH"] + self.tokenizer.get_vocabulary()[2:]
+        #     self.tokenizer.set_vocabulary(vocab)
             
         self.vocabulary = self.tokenizer.get_vocabulary() # list of strings
 
@@ -135,10 +151,20 @@ def select_some(x):
         result = tf.constant([], dtype=x.dtype)
     return result
 
+def remove_input_arguments(text_in):
+    return tf.strings.regex_replace(text_in, "PREDEND.*EOP", "")
 
-def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size):
+
+def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, remove_args):
   def prepare_data(x):
-    text_in = tf.expand_dims(x["input"], -1)
+
+    text_in = x["input"]
+    if remove_args:
+        text_in = remove_input_arguments(text_in)
+    text_in = tf.expand_dims(text_in, -1)
+    
+
+    
     text_out = tf.expand_dims(x["output"], -1)
     text_in = tokenizer_in(text_in)
 
@@ -577,7 +603,6 @@ class Translator(tf.Module):
     self.tokenizer_out = tokenizer_out
     self.transformer = transf
     self.vocab_out = self.tokenizer_out.vocabulary
-    print(self.vocab_out[:20])
     print(self.tokenizer_out.tokenizer.get_config())
 
     
@@ -719,6 +744,8 @@ class Translator(tf.Module):
       tokens = tf.gather(self.vocab_out, output)
       tokens = tokens[0].numpy()
       tokens = [t.decode('UTF-8') for t in tokens]
+
+      # print("RULE {}, {}".format(prob, " ".join(tokens)))
 
       rule, isvalid = parse_rule(tokens)
       result.append((prob, " ".join(tokens), isvalid, rule))

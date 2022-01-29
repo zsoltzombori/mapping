@@ -22,10 +22,12 @@ parser.add_argument('--num_layers', type=int, default=3)
 parser.add_argument('--d_model', type=int, default=256)
 parser.add_argument('--checkpoint_path', type=str, default=None)
 parser.add_argument('--lr', type=float, default=0.001)
+parser.add_argument('--lr_decay_steps', type=int, default=1000)
 parser.add_argument('--optimizer', type=str, default="sgd")
 parser.add_argument('--beta1', type=float, default=0.5)
 parser.add_argument('--beta2', type=float, default=0.999)
 parser.add_argument('--char_tokenizer', type=int, default=0)
+parser.add_argument('--remove_args', type=int, default=0)
 
 
 args = parser.parse_args()
@@ -50,7 +52,7 @@ MAX_SEQUENCE_LENGTH_OUT = 20
 # optimizer parameters
 LR_TYPE="decay" #"custom"/"decay"/"plain"
 LR = args.lr
-DECAY_STEPS = 1000
+DECAY_STEPS = args.lr_decay_steps
 WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
 OPTIMIZER=args.optimizer
 BETA_1=args.beta1
@@ -66,17 +68,25 @@ DROPOUT_RATE = 0.1
 # other
 CHECKPOINT_PATH=args.checkpoint_path
 BUFFER_SIZE = 200000
+REMOVE_ARGS = args.remove_args == 1
 
 tf.random.set_seed(1000)
 
 # load data
-(pos_examples, neg_examples), max_input_len, max_output_len = transformer.load_data(DATADIR, BUFFER_SIZE)
+(pos_examples, neg_examples), max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c = transformer.load_data(DATADIR, BUFFER_SIZE)
 pos_examples, pos_examples_val, pos_examples_test = pos_examples
 neg_examples, neg_examples_val, neg_examples_test = neg_examples
 
+# pos_examples = pos_examples.take(1)
+# BATCH_SIZE = 1
+
+
 if CHAR_TOKENIZER:
-  MAX_SEQUENCE_LENGTH_IN = max_input_len
-  MAX_SEQUENCE_LENGTH_OUT = max_output_len
+  MAX_SEQUENCE_LENGTH_IN = max_input_len_c
+  MAX_SEQUENCE_LENGTH_OUT = max_output_len_e
+else:
+  MAX_SEQUENCE_LENGTH_IN = max_input_len_w
+  MAX_SEQUENCE_LENGTH_OUT = max_output_len_w
 
 # create vectorizers
 pos_text_in = pos_examples.map(lambda x: x["input"])
@@ -97,8 +107,8 @@ print("Output vocab size: ", len(tokenizer_out.vocabulary))
 pos_size = tf.data.experimental.cardinality(pos_examples).numpy()
 neg_size = tf.data.experimental.cardinality(neg_examples).numpy()
 BATCH_SIZE = min(BATCH_SIZE, pos_size, neg_size)
-pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE)
-neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE)
+pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
+neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
 
 
 # create optimizer
@@ -189,9 +199,9 @@ def safe_rule(rule, neg_examples):
     candidates = [c.numpy().decode("utf-8") for c in e["output"]]
     return not rule in candidates
 
-def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length):
+def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length, remove_args):
   t0 = time.time()
-  threshold = 0.1
+  threshold = 0.5
   
   pos_success = 0
   neg_failure = 0
@@ -199,19 +209,20 @@ def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length
   for e in pos_examples:
     count += 1
     sentence = e["input"]
+    if remove_args:
+      sentence = transformer.remove_input_arguments(sentence)
     translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
     candidates = [c.numpy().decode("utf-8") for c in e["output"]]
-    # print("translations", translations)
-    # print("candidates", candidates)
-    # aaa
     
     pos_prob = 0.0
     neg_prob = 0.0
     firstrule=None
+    firstprob=0.0
     for (prob, text, isvalid, rule) in translations:
       if isvalid:
         if firstrule is None:
-          firstrule = rule
+          firstrule = text
+          firstprob = prob
         if text in candidates:
           pos_prob += prob
         if not safe_rule(text, neg_examples):
@@ -230,14 +241,19 @@ def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length
     if failure:
       print("---------FAILURE----------")
       print(f'{"Input:":15s}: {sentence.numpy()}')
-      print(f'{firstrule}')
+      for o in e["output"]:
+        print(f'{"   Output:":15s}: {o.numpy()}')
+      print(f'{firstprob} {firstrule}')
       print(f'Pos prob: {pos_prob:.3f}, Neg prob: {neg_prob:.3f}')
     sys.stdout.flush()
 
   t1 = time.time()
   print("Evaltime: {:.2f} sec, positive success ratio: {}, negative failure ratio: {}".format(t1-t0, pos_success / count, neg_failure / count))
 
-print("\n\nEVALUATION")
+print("\n\nEVALUATION on the train set")
+eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+
+print("\n\nEVALUATION on the validation set")
 neg_examples_val = neg_examples.concatenate(neg_examples_val)
-eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT)
+eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 

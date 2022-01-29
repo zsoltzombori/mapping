@@ -3,7 +3,7 @@ import tensorflow as tf
 @tf.custom_gradient
 def LogSumExp(x, axis, mask):
     y = tf.math.log(tf.reduce_sum(mask * tf.math.exp(x), axis=axis))
-    y = tf.clip_by_value(y, -100, 100)
+    y = tf.clip_by_value(y, -10000, 0)
     # y = tf.math.reduce_logsumexp(x, axis=axis)
 
     def grad(upstream):

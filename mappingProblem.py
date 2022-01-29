@@ -3,6 +3,7 @@ import psycopg2
 import os
 import itertools
 import time
+import sys
 
 import util
 import query
@@ -10,11 +11,10 @@ from rule import Rule, Variable, Constant, StringFromCols
 import tensorflow as tf
 
 class MappingProblem:
-    def __init__(self, schema, ontology, true_mapping, true_schema):
+    def __init__(self, schema, ontology, true_mapping):
         self.schema = schema
         self.ontology = ontology
         self.true_mapping = true_mapping
-        self.true_schema = true_schema
         self.graph = rdflib.Graph()
         self.graph.parse(ontology)
         self.queries = []
@@ -29,9 +29,6 @@ class MappingProblem:
         # util.inspect_schema(self.cursor, self.schema)
         self.cursor.execute("SET search_path TO {}, public;".format(self.schema))
 
-        self.true_cursor = util.init_db()
-        self.true_cursor.execute("SET search_path TO {}, public;".format(self.true_schema))
-        
         self.db_attributes = util.attributes(self.cursor, self.schema)
         self.db_tables = self.db_attributes.keys()
         self.preds = util.db2preds(self.cursor, self.schema, allowed_types=None)
@@ -45,25 +42,44 @@ class MappingProblem:
         self.properties = self.get_properties()
         # print(self.properties)
 
-        self.rules = []
-        for p in self.true_mapping:
-            self.rules.append(Rule([[p, Variable(1)], [p+"_pred1a", Variable(1)]], self.cursor, self.preds))
-            self.rules.append(Rule([[p, Variable(1)], [p+"_pred2a", Variable(1), Constant(p+"_const2a")]], self.cursor, self.preds))
-            self.rules.append(Rule([[p, Variable(1)], [StringFromCols(p+"_sfc3a"), Variable(1)]], self.cursor, self.preds))
+    def get_rules(self, p):
+        rules = []
+        rules.append(Rule([[p, Variable(1)], [p+"_upred_1a", Variable(1)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1)], [p+"_upred_2a", Variable(1), Constant(p+"_uconst_2a")]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1)], [StringFromCols(p+"_upred_3a"), Variable(1)]], self.cursor, self.preds))
 
-            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred3a", Variable(1), Variable(2)]], self.cursor, self.preds))
-            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred4a", Variable(1), Variable(2)], [p+"_pred4b", Variable(1)]], self.cursor, self.preds))
-            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred5a", Variable(1), Variable(2)], [p+"_pred5b", Variable(2)]], self.cursor, self.preds))
-            self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred6a", Variable(1), Variable(2)], [p+"_pred6b", Variable(1)], [p+"_pred6c", Variable(2)]], self.cursor, self.preds))
-            # self.rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_1a", Variable(1), Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_2a", Variable(1), Variable(2)], [p+"_bpred_2b", Variable(1)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_3a", Variable(1), Variable(2)], [p+"_bpred_3b", Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_4a", Variable(1), Variable(2)], [p+"_bpred_4b", Variable(1)], [p+"_bpred_4c", Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [StringFromCols(p+"_sbpred_5a"), Variable(1), Variable(2)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
+        return rules
+        
+    def generate_data(self, samplesize, path, fromqueries=False):
 
-    def generate_data(self, samplesize, path):
+        if fromqueries:
+            preds_and_queries = []
+            
+            for query in self.queries:
+                success, pred, sql = query.create_supervision()
+                if success:
+                    preds_and_queries.append((pred,sql))
+                else:
+                    print("Skipping query: ", query.filename)
+        else:
+            preds_and_queries = self.true_mapping.items()
+        
         elements = {
             True: {"input": [], "output": []},
             False: {"input": [], "output": []},
         }
-        
-        for predicate in self.true_mapping:
+
+        print("NUMBER of PREDS:", len(preds_and_queries))
+        for predicate, query in preds_and_queries:
+            T0 = time.time()
+            print("PREDICATE: ", predicate)
+            print("SQL: ", query)
 
             elements_curr = {
                 True: {"input": [], "output": []},
@@ -71,11 +87,11 @@ class MappingProblem:
             }
             
             mapping_dict = {True:[], False:[]}
-            query = self.true_mapping[predicate]
-            pos_mappings, pos_targets, neg_mappings, neg_targets = util.create_supervision(self.true_cursor, predicate, query, self.constants, self.rules, samplesize)
+            rules = self.get_rules(predicate)
+            pos_mappings, pos_targets, neg_mappings, neg_targets = util.create_supervision(self.cursor, predicate, query, self.constants, rules, samplesize)
 
             print("Mapping statistics for predicate ", predicate)
-            util.visualise_mapping_dict({True:pos_mappings, False:neg_mappings})
+            # util.visualise_mapping_dict({True:pos_mappings, False:neg_mappings})
 
             # d_input = ["SOS"] + [str(predicate)] + ["EOP","EOS"]
             # d_input = " ".join(d_input)
@@ -89,12 +105,14 @@ class MappingProblem:
                             arg = "_".join(arg)
                         d_input = "{} {}".format(d_input, arg)
                     d_input += " EOP EOS"
+                    # d_input = util.tokenize(d_input)
                     target_list = targets[head]
                     target_list = [[str(x) for x in target] for target in target_list]
                     d_output = [" ".join(target) for target in target_list]
+                    # d_output = [util.tokenize(d) for d in d_output]
                     # print("-----")
                     # print(d_input)
-                    # [print(do) for do in d_output]
+                    # [print(ispositive, do) for do in d_output]
                     # print("-----")
                     elements[ispositive]["input"].append(d_input)
                     elements[ispositive]["output"].append(d_output)
@@ -102,6 +120,8 @@ class MappingProblem:
                     elements_curr[ispositive]["output"].append(d_output)
 
             self.elements2file(elements_curr, "{}_{}".format(path, predicate))
+            print("Time for predicate {}: {}".format(predicate, time.time() - T0))
+            sys.stdout.flush()
 
         # for ispositive in (True, False):
         #     print(ispositive)

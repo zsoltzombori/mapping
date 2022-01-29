@@ -227,6 +227,7 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     cursor.execute(query)
     result = cursor.fetchall()
     result = list(set(result))
+    print("ROWS FOUND: ", len(result))
 
     # remove null values
     result_filtered = []
@@ -242,7 +243,6 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     pos_targets = {}
     for pt in pos_tuples: # collect proofs for each fact
         atom = tuple([predicate] + list(pt))
-        # print("pos fact: ", atom)
         pos_targets[atom] = []
         for r in rules:
             pos_mappings_curr, pos_targets_curr = r.get_support([predicate] + list(pt))
@@ -267,7 +267,8 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
     neg_targets = {}
     neg_tuples = []
     attempts = 1000
-    while (len(neg_mappings) < pos_mappings_size) and attempts > 0:
+    # while (len(neg_mappings) < pos_mappings_size) and attempts > 0:
+    while (len(neg_tuples) < len(pos_tuples)) and attempts > 0:
         attempts -= 1
         # generate a random tuple of matching type
         nt = []
@@ -314,6 +315,9 @@ def visualise_mapping_dict(mapping_dict):
     for p in pred_dict:
         print("   {}: {}".format(p, pred_dict[p]))
     print("")
+
+def tokenize(mystring):
+    return mystring.replace("/", " / ")
 
 
 def type_match(sql_type, obj):

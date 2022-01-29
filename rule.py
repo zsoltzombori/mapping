@@ -1,5 +1,6 @@
 import datetime
 import decimal
+import re
 
 import util
 
@@ -39,26 +40,42 @@ class StringFromCols:
         for m in matches:
             if m[0] < curr_index:
                 continue
-            
-            if m[0] > curr_index: # there is some padding
-                padding = text[curr_index:m[0]]
-                result_cols.append(padding)
-                result_vals.append(padding)
+
+            padding = text[curr_index:m[0]]
+
+            # there should always be some padding
+            # if len(padding) == 0:
+            #     return False, None
+
+            # padding should not contain "/{number}/" pattern
+            if re.search("/[0-9]+/", padding):
+                return False, None
+            if re.search("/[0-9]+-[0-9]+-[0-9]+/", padding):
+                return False, None
+                
+            result_cols.append(padding)
+            result_vals.append(padding)
                 
             result_cols.append(m[2])
             result_vals.append(m[3])
+            
             match_count += 1
             curr_index = m[0] + m[1]
 
         if curr_index < len(text)-1: # paddding at the end
             padding = text[curr_index:]
+            if re.search("/[0-9]+", padding):
+                return False, None
+            if re.search("/[0-9]+-[0-9]+-[0-9]+/", padding):
+                return False, None
+            
             result_cols.append(padding)
             result_vals.append(padding)            
         
-        return match_count, tuple(result_cols), tuple(result_vals)
+        return True, (match_count, tuple(result_cols), tuple(result_vals))
         
             
-    def align(self, text, cursor, tables):
+    def align_unary(self, text, cursor, tables):
         matches = []
         for table in tables:
             columns = tables[table]
@@ -71,12 +88,12 @@ class StringFromCols:
             matches_for_table = []
             best_count = 0
             for r in result:
-                match = self.find_split(text, columns, r)
-                if match not in duplicate_checker:
+                success, match = self.find_split(text, columns, r)
+                if success and match not in duplicate_checker:
                     duplicate_checker[match] = True
                     match_count, matched_cols, matched_vals = match
-                    best_count = max(best_count, match_count)
-                    if match_count == best_count and match_count >=2:
+                    best_count = max(match_count, best_count)
+                    if match_count == best_count and match_count >=1: # TODO match_count threshold
                         matches_for_table.append((match_count, table, matched_cols, matched_vals))
 
             matches_for_table.sort(reverse=True)
@@ -88,6 +105,39 @@ class StringFromCols:
                 matches.append((self.n, cols, vals))
         return matches
 
+    def align_binary(self, text1, text2, cursor, tables):
+        matches = []
+        for table in tables:
+            columns = tables[table]
+            columns = [c[0] for c in columns]
+            colstrings = ["CAST({} as CHARACTER VARYING)".format(c) for c in columns]
+            sql = "select distinct {} from {};".format(", ".join(colstrings), table)
+            cursor.execute(sql)
+            result = cursor.fetchall()
+            duplicate_checker = {}
+            matches_for_table = []
+            best_count = 0
+            for r in result:
+                success1, match1 = self.find_split(text1, columns, r)
+                success2, match2 = self.find_split(text2, columns, r)
+                if success1 and success2 and (match1, match2) not in duplicate_checker:
+                    duplicate_checker[(match1, match2)] = True
+                    match_count1, matched_cols1, matched_vals1 = match1
+                    match_count2, matched_cols2, matched_vals2 = match2
+                    best_count = max(match_count1+match_count2, best_count)
+                    if (match_count1+match_count2) == best_count and match_count1 >=1 and match_count2 >=1: # TODO match_count threshold
+                        matches_for_table.append((match_count1+match_count2, table, matched_cols1, matched_vals1, matched_cols2, matched_vals2))
+
+            matches_for_table.sort(reverse=True)
+            for cnt, table, cols1, vals1, cols2, vals2 in matches_for_table:
+                if cnt < best_count:
+                    break
+                cols1 = list(cols1)
+                cols1.insert(0, table)
+                cols2 = list(cols2)
+                cols2.insert(0, table)
+                matches.append((self.n, cols1+cols2, vals1+vals2))
+        return matches
     
 
 # an atom is a list
@@ -117,19 +167,22 @@ class Rule:
             elif h_arg != f_arg:
                 return [], []
         target.append("EOH")
-        
+
         return self.candidate_mappings(self.body, subst, {}, target)
 
 
     def unifying_facts(self, atom):
         args = atom[1:]
         if isinstance(atom[0], StringFromCols):
-            assert len(args) == 1
-
             if not isinstance(args[0], str):
                 return []
 
-            matches = atom[0].align(args[0], self.cursor, self.preds["table"])
+            if len(args) == 1:
+                matches = atom[0].align_unary(args[0], self.cursor, self.preds["table"])
+            else:
+                if not isinstance(args[1], str):
+                    return []
+                matches = atom[0].align_binary(args[0], args[1], self.cursor, self.preds["table"])
             return matches
         
         if len(args) == 1: # unary predicate

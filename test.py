@@ -11,37 +11,34 @@ from rule import Rule, Variable, Constant
 import train
 import data
 
-#schema = "conference_structured"
-#schema = "conference_renamed"
-#schema = "npd_user_tests"
 POS_SIZE=100
-
-# true_mapping = supervision.cmt_mapping
-# true_schema = supervision.cmt_schema
-# true_mapping = supervision.npd_mapping
-# true_schema = supervision.npd_schema
+FROMQUERIES=True
 
 schemas = (
-    ("cmt_renamed", "cmt_renamed", supervision.cmt_renamed_mapping),
-    # "cmt_structured",
-    # "cmt_structured_ci",
-    # "cmt_naive",
-    # "cmt_naive_ci",
-    # "cmt_denormalized",
-    # "cmt_mixed",
-    # "cmt2sigkdd",
+    # ("cmt_renamed", supervision.cmt_renamed_mapping),
+    # ("cmt_structured", supervision.cmt_structured_mapping),
+    ("npd", supervision.npd_mapping),
+    # ("cmt_structured_ci", supervision.cmt_structured_ci_mapping),
+    # ("cmt_naive", supervision.cmt_naive_mapping),
+    # ("cmt_naive_ci", supervision.cmt_naive_ci_mapping),
+    # ("cmt_denormalized", supervision.cmt_denormalized_mapping),
+    # ("cmt_mixed", supervision.cmt_mixed_mapping),
+
+    
+    # ("cmt2sigkdd", supervision.cmt2sigkdd_mapping),
     # "cmt2conference",
-    # ("npd", "npd", supervision.npd_mapping),
 )
 
-for schema, true_schema, true_mapping in schemas:
+for schema, true_mapping in schemas:
     print("SCHEMA: ", schema)
     ontology = "RODI/data/{}/ontology.ttl".format(schema)
     query_dir = "RODI/data/{}/queries".format(schema)
     datapath = "outdata/{}".format(schema)
-    problem = mappingProblem.MappingProblem(schema, ontology, true_mapping, true_schema)
+    problem = mappingProblem.MappingProblem(schema, ontology, true_mapping)
+    problem.add_query_dir(query_dir)
+
     t0 = time.time()
-    problem.generate_data(samplesize=POS_SIZE, path=datapath)
+    problem.generate_data(samplesize=POS_SIZE, path=datapath, fromqueries=FROMQUERIES)
     t1 = time.time()
     print("Data generation for schema {} took {:.3f} sec".format(schema, t1 - t0))
 
@@ -108,7 +105,6 @@ for schema, true_schema, true_mapping in schemas:
 
 # xxx
 
-# problem.add_query_dir(query_dir)
 
 # success = 0
 # for query in problem.queries:

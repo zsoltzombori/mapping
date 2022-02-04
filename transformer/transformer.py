@@ -7,7 +7,7 @@ ENT_WEIGHT=0.0
 CLIP_NORM = 0.1
 
 LENGTH_PENALTY=0.5
-SUPPORT_SIZE=50
+SUPPORT_SIZE=10
 
 import collections
 import logging
@@ -37,7 +37,23 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 ##########################################
 
-def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
+def remove_structure_fun(text):
+    text = tf.strings.regex_replace(text, " ", "___")
+    text = tf.strings.regex_replace(text, "SOS___", "SOS ")
+    text = tf.strings.regex_replace(text, "___EOS", " EOS")
+    return text
+
+def preprocess_data(examples, remove_args, remove_structure):
+    examples = examples.map(lambda x: (x["input"], x["output"]))
+    if remove_args:
+        examples = examples.map(lambda i, o: (tf.strings.regex_replace(i, "PREDEND.*EOP", ""), o))
+    if remove_structure:
+        examples = examples.map(lambda i, o: (i, remove_structure_fun(o)))
+
+    return examples
+    
+
+def load_data(datadir, buffer_size, remove_args, remove_structure, split=(0.7, 0.15, 0.15)):
     element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
     result = []
 
@@ -47,8 +63,10 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
     max_output_len_w = 0
     for example_type in ("pos", "neg"):
         examples = tf.data.experimental.load(datadir + "/" + example_type, element_spec=element_spec)
+
+        examples = preprocess_data(examples, remove_args, remove_structure)
         
-        examples = examples.shuffle(buffer_size)
+        examples = examples.shuffle(buffer_size, reshuffle_each_iteration=False)
         size = tf.data.experimental.cardinality(examples).numpy()
 
         train_size = int(split[0] * size)
@@ -68,14 +86,14 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
 
         max_shape = 0
         for e in train_examples:
-            max_shape = max(max_shape, e["output"].shape[0])
+            max_shape = max(max_shape, e[1].shape[0])
             # print("------")
-            i = e["input"]
+            i = e[0]
             lin = tf.strings.length(i).numpy()
             max_input_len_c = max(max_input_len_c, lin)
             lin = len(tf.strings.split(i))
             max_input_len_w = max(max_input_len_w, lin) 
-            for o in e["output"]:
+            for o in e[1]:
                 lout = tf.strings.length(o).numpy()
                 max_output_len_c = max(max_output_len_c, lout)
                 lout = len(tf.strings.split(o))
@@ -111,6 +129,7 @@ class MyTokenizer:
             split=split,
             output_sequence_length=max_seq_len            
         )
+
         self.tokenizer.adapt(train_text)
 
         # if is_char_tokenizer:
@@ -136,51 +155,61 @@ class MyTokenizer:
         return self.tokenizer(arg)
 
     
-def select_some(x):
-    x2 = tf.reduce_sum(x, axis=-1)
-    mask_zero = tf.cast(tf.math.equal(x2, 0), dtype=tf.float32)
+def select_some_outputs(text_in, text_out, out_length):
+    padding = tf.zeros((SUPPORT_SIZE, out_length), dtype=text_out.dtype)
+    text_out = tf.concat([text_out, padding], axis=0)
+    
+    x = tf.reduce_sum(text_out, axis=-1)
+    mask_zero = tf.cast(tf.math.equal(x, 0), dtype=tf.float32)
     logits = mask_zero * -1e10
+
     z = -tf.math.log(-tf.math.log(tf.random.uniform(tf.shape(logits),0,1)))
     gumbel = logits + z
-
-    if len(gumbel) > 0:
-        k = tf.minimum(SUPPORT_SIZE, len(gumbel))
-        values, indices = tf.nn.top_k(gumbel,k)    
-        result = tf.gather(x, indices)
-    else:
-        result = tf.constant([], dtype=x.dtype)
-    return result
+    values, indices = tf.nn.top_k(gumbel,SUPPORT_SIZE)    
+    result = tf.gather(text_out, indices)
+        
+    return text_in, result
 
 def remove_input_arguments(text_in):
     return tf.strings.regex_replace(text_in, "PREDEND.*EOP", "")
 
-
-def make_batches(ds, tokenizer_in, tokenizer_out, buffer_size, batch_size, remove_args):
-  def prepare_data(x):
-
-    text_in = x["input"]
-    if remove_args:
-        text_in = remove_input_arguments(text_in)
-    text_in = tf.expand_dims(text_in, -1)
+def tokenize_data(text_in, text_out, tokenizer_in, tokenizer_out):
+    text_in = tf.expand_dims(text_in, -1)    
+    text_in = tokenizer_in(text_in)[0]
     
-
-    
-    text_out = tf.expand_dims(x["output"], -1)
-    text_in = tokenizer_in(text_in)
-
-    text_out_values = tokenizer_out(text_out.values)
-    text_out = tf.RaggedTensor.from_row_splits(text_out_values, text_out.row_splits)
-    text_out = text_out.to_tensor(default_value = 0)
-    text_out = tf.map_fn(select_some, text_out)
+    text_out = tf.expand_dims(text_out, -1)
+    text_out = tokenizer_out(text_out)
     return text_in, text_out
-  
-  return (
-    ds
-    .cache()
-    .shuffle(buffer_size)
-    .batch(batch_size)
-    .map(prepare_data, num_parallel_calls=tf.data.AUTOTUNE)
-    .prefetch(tf.data.AUTOTUNE))
+
+def tokenize_data_orig(text_in, text_out, tokenizer_in, tokenizer_out):
+    text_in = tf.expand_dims(text_in, -1)    
+    text_in = tokenizer_in(text_in)
+    
+    text_out = tf.expand_dims(text_out, -1)
+    print("aaa", text_out.shape)
+    text_out = tokenizer_out(text_out)
+    return text_in, text_out
+
+def make_batches(ds, buffer_size, batch_size, out_length):
+    
+    return (
+        ds
+        .cache()
+        .shuffle(buffer_size)
+        .map((lambda i, o: select_some_outputs(i, o, out_length)), num_parallel_calls=tf.data.AUTOTUNE)
+        .batch(batch_size)
+        .prefetch(tf.data.AUTOTUNE))
+
+def make_batches_orig(ds, buffer_size, batch_size, out_length, tokenizer_in, tokenizer_out):
+    
+    return (
+        ds
+        .cache()
+        .shuffle(buffer_size)
+        .map((lambda i, o: tokenize_data(i, o, tokenizer_in, tokenizer_out)), num_parallel_calls=tf.data.AUTOTUNE)
+        .map((lambda i, o: select_some_outputs(i, o, out_length)), num_parallel_calls=tf.data.AUTOTUNE)
+        .batch(batch_size)
+        .prefetch(tf.data.AUTOTUNE))
 
 
 def get_angles(pos, i, d_model):
@@ -519,11 +548,6 @@ train_step_signature = [
   tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
 ]
 
-train_step_signature2 = [
-  tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-  tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
-]
-
 
 def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, ckpt_manager=None):
 
@@ -576,6 +600,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         
 
         for (batch, ((pos_inp, pos_tar), (neg_inp, neg_tar))) in enumerate(zip(pos_batches, neg_batches)):
+            print(pos_inp.shape, neg_inp.shape, pos_tar.shape, neg_tar.shape)
             if pos_inp.shape[0] != neg_inp.shape[0]:
                 break            
             train_step_(pos_inp, pos_tar, neg_tar)
@@ -751,139 +776,6 @@ class Translator(tf.Module):
       result.append((prob, " ".join(tokens), isvalid, rule))
     return result
 
-  def beamsearch_with_critique(self, sentence, critique, parse=True, max_length=20, beamsize=10):
-    assert isinstance(sentence, tf.Tensor)
-    if len(sentence.shape) == 0:
-      sentence = sentence[tf.newaxis]
-
-    sentence = self.tokenizer_in(sentence)
-    encoder_input = sentence
-
-    output_array = [self.start[0]]
-
-    # list of top k output sequences
-    # (score, prob, prob_c, output_array, len, ended)
-    t = {
-        "score":0.0,
-        "logprob":0.0,
-        "logprob_c":0.0,
-        "output":output_array,
-        "len":1,
-        "ended":False,
-        "logprob_hist":[],
-        "logprob_c_hist":[],
-    }
-    top = [t]
-
-    while len(top) > 0:
-        
-        # expand most probable sequence that hasn't ended yet
-        index = 0
-        found = False
-        while index < len(top):
-            curr = top[index]
-            if not curr["ended"]:
-                del top[index]
-                found = True
-                break
-            index += 1
-        if not found: # no more sequences to expand
-            break
-
-        output = tf.convert_to_tensor([curr["output"]])
-        predictions, _ = self.transformer([encoder_input, output], training=False)
-        predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)
-        logprobs = predictions - tf.math.reduce_logsumexp(predictions, axis=-1, keepdims=True)
-        logprobs = logprobs[0][0]
-
-        predictions_c, _ = critique([encoder_input, output], training=False)
-        predictions_c = predictions_c[:, -1:, :]  # (batch_size, 1, vocab_size)      
-        logprobs_c = predictions_c - tf.math.reduce_logsumexp(predictions_c, axis=-1, keepdims=True)
-        logprobs_c = logprobs_c[0][0]
-
-
-        cumulative_logprobs = logprobs + curr["logprob"]
-        cumulative_logprobs_c = logprobs_c + curr["logprob_c"]
-        cumulative_scores = cumulative_logprobs
-        # cumulative_scores /= tf.math.pow((6+curr["len"])/(6+1),LENGTH_PENALTY) 
-      
-        # get the k best continuations
-        k = tf.minimum(beamsize, cumulative_scores.shape[0])
-        selected_scores = tf.math.top_k(cumulative_scores, sorted=True, k=k)
-
-        # merge them into top
-        scores = tf.unstack(selected_scores.values)
-        indices = tf.unstack(tf.cast(selected_scores.indices, dtype=tf.int64))
-        logprobs = tf.gather(logprobs, indices)
-        logprobs_c = tf.gather(logprobs_c, indices)
-        cumulative_logprobs = tf.gather(cumulative_logprobs, indices)
-        cumulative_logprobs_c = tf.gather(cumulative_logprobs_c, indices)
-        start_index = 0
-
-        # insert each new element into top
-        for (i, predicted_id) in enumerate(indices):
-            score = scores[i]
-            logprob = logprobs[i]
-            logprob_c = logprobs_c[i]
-            cumulative_logprob = cumulative_logprobs[i]
-            cumulative_logprob_c = cumulative_logprobs_c[i]
-
-            if start_index == len(top) and len(top) >= beamsize:
-                break
-
-            # find the place of the new element
-            while(True):
-                if start_index >= len(top):
-                    break
-                else:
-                    t = top[start_index]
-                    if score > t["score"]:
-                        break
-                start_index += 1
-          
-            new_output = copy.deepcopy(curr["output"])
-            new_output.append(predicted_id)
-            end = tf.constant(predicted_id == self.end[0] or curr["len"]+1 >= max_length)
-            new_logprob_hist = copy.copy(curr["logprob_hist"])
-            new_logprob_c_hist = copy.copy(curr["logprob_c_hist"])
-            new_logprob_hist.append(logprob)
-            new_logprob_c_hist.append(logprob_c)
-            new_item = {
-                "score":score,
-                "logprob":cumulative_logprob,
-                "logprob_c":cumulative_logprob_c,
-                "output":new_output,
-                "len":curr["len"] + 1,
-                "ended":end,
-                "logprob_hist":new_logprob_hist,
-                "logprob_c_hist":new_logprob_c_hist,
-            }
-            top.insert(start_index, new_item)
-        top = top[:beamsize]
-
-    # collect best results
-    result = []
-    for t in top:
-        output = tf.convert_to_tensor([t["output"]])
-        tokens = tf.gather(self.vocab_out, output)
-        tokens = tokens[0].numpy()
-        tokens = [t.decode('UTF-8') for t in tokens]
-
-        score = t["score"]
-        prob = tf.exp(t["logprob"])
-        prob_c = tf.exp(t["logprob_c"])
-        prob_hist = [tf.exp(x) for x in t["logprob_hist"]]
-        prob_c_hist = [tf.exp(x) for x in t["logprob_c_hist"]]
-
-        if parse:
-            rule, isvalid = parse_rule(tokens)
-            if not isvalid:
-                break
-        else:
-            rule = " ".join(tokens)
-        result.append((score, prob, prob_c, prob_hist, prob_c_hist, rule))
-
-    return result
 
 def parse_rule(tokens):
   if tokens[0] != 'SOS':

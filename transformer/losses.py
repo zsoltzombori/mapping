@@ -33,34 +33,32 @@ def loss_function(real, pred, ispositive):
     sequence_logprobs = tf.reduce_sum(logprobs, axis=2) #(support * bs)
     # print("sequence_logprobs", tf.transpose(sequence_logprobs, perm=[1,0])[0])
 
-    # reduce logprobs for all supporting sequences, removing padding sequences
-    sequence_logprobs_all = LogSumExp(sequence_logprobs, 0, mask_nonzero_sequence)
-    # print("sequence_logprobs_all", sequence_logprobs_all)
+    if False: # old loss function
+        # reduce logprobs for all supporting sequences, removing padding sequences
+        sequence_logprobs_all = LogSumExp(sequence_logprobs, 0, mask_nonzero_sequence)
+        # print("sequence_logprobs_all", sequence_logprobs_all)
 
-    sequence_probs_all = tf.math.exp(sequence_logprobs_all)
-    # print("sequence_probs_all", sequence_probs_all)
+        sequence_probs_all = tf.math.exp(sequence_logprobs_all)
+        # print("sequence_probs_all", sequence_probs_all)
     
-    if ispositive:
-        loss = - sequence_logprobs_all
-        seq_weight = tf.stop_gradient(1 - sequence_probs_all)
-        # loss = seq_weight * loss
-    else:
-        loss = tf.maximum(0.0, sequence_logprobs_all + 30.0)
-        # seq_weight = tf.stop_gradient(sequence_probs_all)
-    
-    # sequence_logprobs_all = LogSumExp(sequence_logprobs)
+        if ispositive:
+            loss = - sequence_logprobs_all
+        else:
+            loss = tf.maximum(0.0, sequence_logprobs_all + 30.0)
 
-    # print("\n______ sequence_probs_______")
-    # print(tf.transpose(real, perm=[1, 0, 2]))
-    
-    # print(tf.transpose(logprobs, perm=[1, 0, 2, 3]))
-    # print(tf.transpose(target_logprobs, perm=[1, 0, 2]))
-    # print(tf.transpose(sequence_logprobs))
-    # sequence_probs = tf.math.exp(sequence_logprobs)
-    # print("PROBS: ", tf.transpose(sequence_probs))
-
-    # loss = sequence_logprobs_all
-    # loss = tf.exp(loss)
+    else: # new loss function
+        sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
+        sequence_probs_all = tf.reduce_sum(sequence_probs, axis=0)
+        if ispositive:
+            # print(sequence_probs_all)
+            # print("logprobs", sequence_logprobs)
+            # print("probs", sequence_probs)
+            seq_weight = tf.stop_gradient(1.0 - sequence_probs_all)
+            loss = - tf.reduce_sum(sequence_logprobs, axis=0)
+        else:
+            seq_weight = tf.stop_gradient(sequence_probs_all)
+            loss = tf.maximum(0.0, tf.reduce_sum(sequence_logprobs, axis=0) + 30.0)
+        loss *= seq_weight
 
     loss = tf.reduce_mean(loss)
     probs = tf.reduce_mean(sequence_probs_all)

@@ -2,7 +2,7 @@ import tensorflow as tf
 
 @tf.custom_gradient
 def LogSumExp(x, axis, mask):
-    y = tf.math.log(tf.reduce_sum(mask * tf.math.exp(x), axis=axis))
+    y = tf.math.log(1e-10 + tf.reduce_sum(mask * tf.math.exp(x), axis=axis))
     y = tf.clip_by_value(y, -10000, 0)
     # y = tf.math.reduce_logsumexp(x, axis=axis)
 
@@ -14,6 +14,30 @@ def LogSumExp(x, axis, mask):
         return upstream * softmax, tf.constant(0.0), tf.constant(0.0)
 
     return y, grad
+
+@tf.custom_gradient
+def LogOneMinusSumExp(logp, mask):
+    # y = log(1-sum(exp(logp)))
+    probs = mask * tf.math.exp(logp)
+    invprob = 1.0 - tf.reduce_sum(probs, axis=-1)
+    y = tf.math.log(1e-10 + invprob)
+    y = tf.clip_by_value(y, -10000, 0)
+
+    
+    def grad(upstream):
+        # grad = 1/(sum(probs) - 1) * sum_j (p_j * ( delta_ij - p_i ))
+        coeff = 1.0 / (1e-10 + invprob)
+        probs = mask * tf.math.exp(logp)
+        idmatrix = tf.eye(tf.shape(probs)[1], batch_shape = (tf.shape(probs)[0],))
+        probs2 = tf.expand_dims(probs, axis=-1)
+        grad = tf.matmul(idmatrix - probs2, probs2)
+        grad = grad[:,:,0]
+        grad = grad * tf.expand_dims(coeff,axis=-1) 
+        grad = grad * mask
+        return tf.expand_dims(upstream, axis=-1) * grad, tf.constant(0.0)
+
+    return y, grad
+
 
 def loss_function(real, pred, ispositive):
     mask_zero = tf.math.equal(real, 0)
@@ -31,37 +55,60 @@ def loss_function(real, pred, ispositive):
     # replace padding element probs with 1 for multiplication
     logprobs *= mask_nonzero
     sequence_logprobs = tf.reduce_sum(logprobs, axis=2) #(support * bs)
-    # print("sequence_logprobs", tf.transpose(sequence_logprobs, perm=[1,0])[0])
+
+    sequence_logprobs = tf.transpose(sequence_logprobs, perm=[1,0]) # (bs * support)
+    mask_nonzero_sequence = tf.transpose(mask_nonzero_sequence, perm=[1,0]) # (bs * support)
 
     if False: # old loss function
         # reduce logprobs for all supporting sequences, removing padding sequences
-        sequence_logprobs_all = LogSumExp(sequence_logprobs, 0, mask_nonzero_sequence)
-        # print("sequence_logprobs_all", sequence_logprobs_all)
-
-        sequence_probs_all = tf.math.exp(sequence_logprobs_all)
-        # print("sequence_probs_all", sequence_probs_all)
+        datapoint_logprobs = LogSumExp(sequence_logprobs, -1, mask_nonzero_sequence) #(bs,)
+        datapoint_probs = tf.math.exp(datapoint_logprobs) #(bs,)
     
         if ispositive:
-            loss = - sequence_logprobs_all
+            loss = - datapoint_logprobs
         else:
-            loss = tf.maximum(0.0, sequence_logprobs_all + 30.0)
+            loss = tf.maximum(0.0, datapoint_logprobs + 30.0)
 
-    else: # new loss function
+    elif False: # new loss function
         sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
-        sequence_probs_all = tf.reduce_sum(sequence_probs, axis=0)
+        datapoint_probs = tf.reduce_sum(sequence_probs, axis=-1)
+        datapoint_logprobs = tf.reduce_sum(sequence_logprobs, axis=-1)
         if ispositive:
-            # print(sequence_probs_all)
-            # print("logprobs", sequence_logprobs)
-            # print("probs", sequence_probs)
-            seq_weight = tf.stop_gradient(1.0 - sequence_probs_all)
-            loss = - tf.reduce_sum(sequence_logprobs, axis=0)
+            seq_weight = tf.stop_gradient(1.0 - datapoint_probs)
+            loss = - datapoint_logprobs
         else:
-            seq_weight = tf.stop_gradient(sequence_probs_all)
-            loss = tf.maximum(0.0, tf.reduce_sum(sequence_logprobs, axis=0) + 30.0)
+            seq_weight = tf.stop_gradient(datapoint_probs)
+            loss = tf.maximum(0.0, datapoint_logprobs + 30.0)
         loss *= seq_weight
+        
+    elif False: # probability ratio preserving (prp) loss
+        # loss = (1 - sum probs) / prod(pow(probs, 1/k))
+        sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
+        datapoint_probs = tf.reduce_sum(sequence_probs, axis=-1)
+        n = 1.0 - datapoint_probs
+        k = 1.0 * tf.reduce_sum(mask_nonzero_sequence, axis=-1, keepdims=True)
+        d = tf.reduce_prod(tf.math.pow(sequence_probs, 1.0 / k), axis=-1)
+        loss = n/d
+        if not ispositive:
+            loss = - loss
+        
+    else: # # probability ratio preserving (prp) loss
+        # loss = (1 - sum probs) / prod(pow(probs, 1/k))
+        # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
+
+        datapoint_logprobs = LogSumExp(sequence_logprobs, -1, mask_nonzero_sequence) #(bs,)
+        datapoint_probs = tf.math.exp(datapoint_logprobs) #(bs,)
+
+        log_n = LogOneMinusSumExp(sequence_logprobs, mask_nonzero_sequence)      
+        k = 1.0 * tf.reduce_sum(mask_nonzero_sequence, axis=-1, keepdims=True)
+        log_d = tf.reduce_sum(sequence_logprobs, axis=-1) / k
+
+        loss = log_n - log_d
+        if not ispositive:
+            loss = tf.maximum(0.0, -loss + 30.0)
 
     loss = tf.reduce_mean(loss)
-    probs = tf.reduce_mean(sequence_probs_all)
+    probs = tf.reduce_mean(datapoint_probs)
     return loss, probs
 
 

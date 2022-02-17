@@ -7,7 +7,9 @@ import losses
 length=10
 samples = [
     [0,1,2,3],
-    [0,4,5],
+    [0,1,2,4,5],
+    [0,1,5],
+    [0, 3, 6]
 ]
 steps = 1000
 lr = tf.constant(0.1)

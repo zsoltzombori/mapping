@@ -202,6 +202,13 @@ def safe_rule(rule, neg_examples):
 def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length, remove_args):
   t0 = time.time()
   threshold = 0.5
+
+  top1_pos = 0
+  top5_pos = 0
+  top10_pos = 0
+  top1_neg = 0
+  top5_neg = 0
+  top10_neg = 0
   
   pos_success = 0
   neg_failure = 0
@@ -218,16 +225,40 @@ def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length
     neg_prob = 0.0
     firstrule=None
     firstprob=0.0
-    for (prob, text, isvalid, rule) in translations:
-      if isvalid:
-        if firstrule is None:
-          firstrule = text
-          firstprob = prob
-        if text in candidates:
-          pos_prob += prob
-        if not safe_rule(text, neg_examples):
-          neg_prob += prob
+    t1p, t5p, t10p, t1n, t5n, t10n = 0, 0, 0, 0, 0, 0
+    for i, (prob, text, isvalid, rule) in enumerate(translations):
+      if not isvalid:
+        continue
+      
+      if firstrule is None:
+        firstrule = text
+        firstprob = prob
+        
+      if text in candidates:
+        pos_prob += prob
+        if i == 0:
+          t1p = 1
+        if i < 5:
+          t5p = 1
+        if i < 10:
+          t10p = 1
+          
+      if not safe_rule(text, neg_examples):
+        neg_prob += prob
+        if i == 0:
+          t1n = 1
+        if i < 5:
+          t5n = 1
+        if i < 10:
+          t10n = 1
 
+    top1_pos += t1p
+    top5_pos += t5p
+    top10_pos += t10p
+    top1_neg += t1n
+    top5_neg += t5n
+    top10_neg += t10n
+    
     failure = False
     if pos_prob > 1-threshold:
       pos_success += 1
@@ -249,6 +280,8 @@ def eval_beamsearch(translator, pos_examples, neg_examples, beamsize, max_length
 
   t1 = time.time()
   print("Evaltime: {:.2f} sec, positive success ratio: {}, negative failure ratio: {}".format(t1-t0, pos_success / count, neg_failure / count))
+  print("Positive top1: {}, top5: {}, top10: {}".format(top1_pos / count, top5_pos / count, top10_pos / count))
+  print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
 
 print("\n\nEVALUATION on the train set")
 eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

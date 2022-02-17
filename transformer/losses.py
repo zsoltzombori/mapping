@@ -30,8 +30,6 @@ def prp_loss(probs, mask_nonzero):
 
 @tf.custom_gradient
 def LogOneMinusSumExp(logp, mask):
-    print("SSSSSSSSS", logp.shape)
-    print("SSSSSSSSSb", mask.shape)
     # y = log(1-sum(exp(logp)))
     probs = mask * tf.math.exp(logp)
     invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)

@@ -54,7 +54,8 @@ class Query:
         pred = re.sub("<.*#(.*)>", r'\1', pred)
         pred = re.sub(":", "", pred)
         
-        sql_query = self.sql_query.replace("COUNT(*)", "*")
+        sql_query = self.sql_query.replace("COUNT(*)", "x")
+        print("query: ", sql_query)
         return True, pred, sql_query
 
 

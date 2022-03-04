@@ -224,7 +224,12 @@ def db2preds(cursor, schema, allowed_types=None):
 def create_supervision(cursor, predicate, query, constants, rules, pos_size):
 
     # first collect positive facts and all their proofs
-    cursor.execute(query)
+    try:
+        cursor.execute(query)
+    except:
+        print("Erroneous query, skipping it: ", query)
+        return [], [], [], []
+    
     result = cursor.fetchall()
     result = list(set(result))
     print("ROWS FOUND: ", len(result))

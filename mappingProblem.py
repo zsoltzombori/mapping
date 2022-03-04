@@ -56,17 +56,16 @@ class MappingProblem:
         # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
         return rules
         
-    def generate_data(self, samplesize, path, fromqueries=False):
+    def generate_data(self, samplesize, path):
 
-        if fromqueries:
-            preds_and_queries = []
-            
+        if self.true_mapping is None:
+            preds_and_queries = []            
             for query in self.queries:
                 success, pred, sql = query.create_supervision()
                 if success:
                     preds_and_queries.append((pred,sql))
                 else:
-                    print("Skipping query: ", query.filename)
+                    print("Skipping query (non-atomic): ", query.filename)
         else:
             preds_and_queries = self.true_mapping.items()
         

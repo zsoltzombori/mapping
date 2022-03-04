@@ -12,33 +12,30 @@ import train
 import data
 
 POS_SIZE=100
-FROMQUERIES=True
 
 schemas = (
-    # ("cmt_renamed", supervision.cmt_renamed_mapping),
-    # ("cmt_structured", supervision.cmt_structured_mapping),
-    ("npd", supervision.npd_mapping),
-    # ("cmt_structured_ci", supervision.cmt_structured_ci_mapping),
-    # ("cmt_naive", supervision.cmt_naive_mapping),
-    # ("cmt_naive_ci", supervision.cmt_naive_ci_mapping),
-    # ("cmt_denormalized", supervision.cmt_denormalized_mapping),
-    # ("cmt_mixed", supervision.cmt_mixed_mapping),
-
-    
-    # ("cmt2sigkdd", supervision.cmt2sigkdd_mapping),
-    # "cmt2conference",
+    ("cmt_renamed", supervision.cmt_renamed_mapping),
+    ("cmt_structured", supervision.cmt_structured_mapping),
+    ("cmt_structured_ci", supervision.cmt_structured_ci_mapping),
+    ("cmt_naive", supervision.cmt_naive_mapping),
+    ("cmt_naive_ci", supervision.cmt_naive_ci_mapping),
+    ("cmt_denormalized", supervision.cmt_denormalized_mapping),
+    ("cmt_mixed", supervision.cmt_mixed_mapping),
+    ("npd", None), 
+    # ("cmt2sigkdd", None),
+    # ("cmt2conference", None),
 )
 
 for schema, true_mapping in schemas:
     print("SCHEMA: ", schema)
     ontology = "RODI/data/{}/ontology.ttl".format(schema)
     query_dir = "RODI/data/{}/queries".format(schema)
-    datapath = "outdata/{}".format(schema)
+    datapath = "outdata/{}/{}".format(schema, schema)
     problem = mappingProblem.MappingProblem(schema, ontology, true_mapping)
     problem.add_query_dir(query_dir)
 
     t0 = time.time()
-    problem.generate_data(samplesize=POS_SIZE, path=datapath, fromqueries=FROMQUERIES)
+    problem.generate_data(samplesize=POS_SIZE, path=datapath)
     t1 = time.time()
     print("Data generation for schema {} took {:.3f} sec".format(schema, t1 - t0))
 

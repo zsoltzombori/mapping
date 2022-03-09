@@ -47,6 +47,23 @@ def create_node(probs, nodes):
     result = [(p,n) for (p,n) in zip(probs, nodes)]
     return result
 
+def exp1():
+    # two datapoints
+    # "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
+    # "SOS y EOS" -> ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
+    in1 = "SOS x EOS"
+    out1 = ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
+    in2 = "SOS y EOS"
+    out2 = ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
+    data = {"input":[in1, in2], "output": [out1, out2]}
+    data["output"] = tf.ragged.stack(data["output"])
+    dataset = tf.data.Dataset.from_tensor_slices(data)
+    tf.data.experimental.save(dataset, "synthetic/exp1/pos")
+
+exp1()
+
+xxx
+    
 
     
 # probs1 = [0.6, 0.3, 0.09, 0.01]

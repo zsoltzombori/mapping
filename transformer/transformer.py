@@ -39,15 +39,17 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
     element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
-    result = []
+    result = {}
 
     max_input_len_c = 0
     max_output_len_c = 0
     max_input_len_w = 0
     max_output_len_w = 0
     for example_type in ("pos", "neg"):
-        examples = tf.data.experimental.load(datadir + "/" + example_type, element_spec=element_spec)
-        
+        datadir_curr = datadir + "/" + example_type
+        if not os.path.isdir(datadir_curr):
+            continue
+        examples = tf.data.experimental.load(datadir_curr, element_spec=element_spec)
         examples = examples.shuffle(buffer_size)
         size = tf.data.experimental.cardinality(examples).numpy()
 
@@ -81,7 +83,7 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
                 lout = len(tf.strings.split(o))
                 max_output_len_w = max(max_output_len_w, lout)
         print("  max support size: ", max_shape)
-        result.append((train_examples, val_examples, test_examples))
+        result[example_type] = (train_examples, val_examples, test_examples)
     print("max input length: ", max_input_len_w, max_input_len_c)
     print("max output length: ", max_output_len_w, max_input_len_c)
     return result, int(max_input_len_w), int(max_input_len_c), int(max_output_len_w), int(max_output_len_c)
@@ -519,19 +521,20 @@ train_step_signature = [
   tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
 ]
 
-train_step_signature2 = [
+train_step_signature_noneg = [
   tf.TensorSpec(shape=(None, None), dtype=tf.int64),
   tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
 ]
 
 
-def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, ckpt_manager=None):
+def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type, ckpt_manager=None):
 
     def train_step(inp, pos_tar, neg_tar):
         pos_tar = tf.transpose(pos_tar, perm=[1,0,2])
-        neg_tar = tf.transpose(neg_tar, perm=[1,0,2])
         pos_tar_real = pos_tar[:, :, 1:]
-        neg_tar_real = neg_tar[:, :, 1:]
+        if neg_tar is not None:
+            neg_tar = tf.transpose(neg_tar, perm=[1,0,2])
+            neg_tar_real = neg_tar[:, :, 1:]
 
         def get_prediction(tar):
             tar_inp = tar[:, :-1]
@@ -540,31 +543,56 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                 
         with tf.GradientTape() as tape:            
             pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-
-            pos_loss, pos_probs = loss_function(pos_tar_real, pos_predictions, True)
+            pos_loss, pos_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
             # print("pos_loss", pos_loss)
-            neg_loss, neg_probs = loss_function(neg_tar_real, neg_predictions, False)
-            # print("neg_loss", neg_loss)
-            loss = pos_loss + neg_weight * neg_loss
+            loss = pos_loss
+
+            if neg_tar is not None:
+                neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
+                neg_loss, neg_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type)
+                # print("neg_loss", neg_loss)
+                loss = pos_loss + neg_weight * neg_loss
 
         gradients = tape.gradient(loss, transformer.trainable_variables)
-        # gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
+        gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
         optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
 
         train_loss(loss)
         train_pos_loss(pos_loss)
-        train_neg_loss(neg_loss)
         train_pos_probs(pos_probs)
-        train_neg_probs(neg_probs)
+        if neg_tar is not None:
+            train_neg_loss(neg_loss)
+            train_neg_probs(neg_probs)
         
         return pos_predictions
 
-    if True:
-        train_step_ = tf.function(train_step, input_signature=train_step_signature)
-    else:
-        train_step_ = train_step
+    def train_step_noneg(inp, pos_tar):
+        pos_tar = tf.transpose(pos_tar, perm=[1,0,2])
+        pos_tar_real = pos_tar[:, :, 1:]
 
+        def get_prediction(tar):
+            tar_inp = tar[:, :-1]
+            predictions, _ = transformer([inp, tar_inp], training = True)
+            return predictions
+                
+        with tf.GradientTape() as tape:            
+            pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
+            pos_loss, pos_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
+            # print("pos_loss", pos_loss)
+            loss = pos_loss
+
+        gradients = tape.gradient(loss, transformer.trainable_variables)
+        gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
+        optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
+
+        train_loss(loss)
+        train_pos_loss(pos_loss)
+        train_pos_probs(pos_probs)        
+        return pos_predictions
+
+    if False:
+        train_step = tf.function(train_step, input_signature=train_step_signature)
+        train_step_noneg = tf.function(train_step_noneg, input_signature=train_step_signature_noneg)
 
     for epoch in range(epochs):
         start = time.time()
@@ -575,10 +603,14 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_neg_probs.reset_states()
         
 
-        for (batch, ((pos_inp, pos_tar), (neg_inp, neg_tar))) in enumerate(zip(pos_batches, neg_batches)):
-            if pos_inp.shape[0] != neg_inp.shape[0]:
-                break            
-            train_step_(pos_inp, pos_tar, neg_tar)
+        if neg_batches is None:
+            for (pos_inp, pos_tar) in pos_batches:
+                train_step_noneg(pos_inp, pos_tar)
+        else:
+            for ((pos_inp, pos_tar), (neg_inp, neg_tar)) in zip(pos_batches, neg_batches):
+                if pos_inp.shape[0] != neg_inp.shape[0]:
+                    break            
+                train_step(pos_inp, pos_tar, neg_tar)
         show_loss(epoch=epoch, start=start)                           
 
         if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
@@ -693,6 +725,8 @@ class Translator(tf.Module):
 
       output = tf.convert_to_tensor([output_curr])
 
+      # print("outputs: ", output)
+      # print("vocab_out: ", self.vocab_out)
       tokens = tf.gather(self.vocab_out, output)
       tokens = tokens[0].numpy()
       tokens = [t.decode('UTF-8') for t in tokens]

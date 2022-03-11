@@ -25,6 +25,8 @@ os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
 import tensorflow as tf
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
+from monitor import MonitorProbs
+
 print("GPU available: ", tf.config.list_physical_devices('GPU'))
 physical_devices = tf.config.list_physical_devices('GPU')
 try:
@@ -50,7 +52,7 @@ def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
         if not os.path.isdir(datadir_curr):
             continue
         examples = tf.data.experimental.load(datadir_curr, element_spec=element_spec)
-        examples = examples.shuffle(buffer_size)
+        examples = examples.shuffle(buffer_size, reshuffle_each_iteration=False)
         size = tf.data.experimental.cardinality(examples).numpy()
 
         train_size = int(split[0] * size)
@@ -527,7 +529,13 @@ train_step_signature_noneg = [
 ]
 
 
-def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type, ckpt_manager=None):
+def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type,
+          monitor_probs=False,
+          outdir=None,
+          ckpt_manager=None):
+
+    if monitor_probs:
+        monitor = MonitorProbs()
 
     def train_step(inp, pos_tar, neg_tar):
         pos_tar = tf.transpose(pos_tar, perm=[1,0,2])
@@ -538,20 +546,17 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
 
         def get_prediction(tar):
             tar_inp = tar[:, :-1]
-            predictions, _ = transformer([inp, tar_inp], training = True)
+            predictions, _ = transformer([inp, tar_inp], training = False)
             return predictions
                 
         with tf.GradientTape() as tape:            
             pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            pos_loss, pos_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
+            pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
             # print("pos_loss", pos_loss)
-            loss = pos_loss
-
-            if neg_tar is not None:
-                neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-                neg_loss, neg_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type)
-                # print("neg_loss", neg_loss)
-                loss = pos_loss + neg_weight * neg_loss
+            neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
+            neg_loss, neg_probs, neg_sequence_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type)
+            # print("neg_loss", neg_loss)
+            loss = pos_loss + neg_weight * neg_loss
 
         gradients = tape.gradient(loss, transformer.trainable_variables)
         gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]
@@ -560,9 +565,11 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_loss(loss)
         train_pos_loss(pos_loss)
         train_pos_probs(pos_probs)
-        if neg_tar is not None:
-            train_neg_loss(neg_loss)
-            train_neg_probs(neg_probs)
+        train_neg_loss(neg_loss)
+        train_neg_probs(neg_probs)
+
+        if monitor_probs:
+            monitor.update(inp, pos_sequence_probs)
         
         return pos_predictions
 
@@ -572,12 +579,12 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
 
         def get_prediction(tar):
             tar_inp = tar[:, :-1]
-            predictions, _ = transformer([inp, tar_inp], training = True)
+            predictions, _ = transformer([inp, tar_inp], training = False)
             return predictions
                 
-        with tf.GradientTape() as tape:            
-            pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            pos_loss, pos_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
+        with tf.GradientTape() as tape:
+            pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=1)
+            pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
             # print("pos_loss", pos_loss)
             loss = pos_loss
 
@@ -587,10 +594,14 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
 
         train_loss(loss)
         train_pos_loss(pos_loss)
-        train_pos_probs(pos_probs)        
+        train_pos_probs(pos_probs)
+            
+        if monitor_probs:
+            monitor.update(inp, pos_sequence_probs)
+        
         return pos_predictions
 
-    if False:
+    if not monitor_probs:
         train_step = tf.function(train_step, input_signature=train_step_signature)
         train_step_noneg = tf.function(train_step_noneg, input_signature=train_step_signature_noneg)
 
@@ -616,6 +627,10 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):
             ckpt_save_path = ckpt_manager.save()
             print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+
+    if monitor_probs:
+        monitor.plot(filename=outdir + "/probchange.png")
+
 
 def show_loss(epoch=None, batch=None,start=None, prefix=""):
     if epoch is not None:
@@ -725,12 +740,9 @@ class Translator(tf.Module):
 
       output = tf.convert_to_tensor([output_curr])
 
-      # print("outputs: ", output)
-      # print("vocab_out: ", self.vocab_out)
       tokens = tf.gather(self.vocab_out, output)
       tokens = tokens[0].numpy()
       tokens = [t.decode('UTF-8') for t in tokens]
-      # print("top of stack: ", output.numpy(), tokens)
       
       predictions, _ = self.transformer([encoder_input, output], training=False)
       predictions = predictions[:, -1:, :]  # (batch_size, 1, vocab_size)      

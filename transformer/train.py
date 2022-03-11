@@ -30,6 +30,8 @@ parser.add_argument('--char_tokenizer', type=int, default=0)
 parser.add_argument('--remove_args', type=int, default=0)
 parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lprp"
 parser.add_argument('--split', type=str, default="0.7,0.15,0.15")
+parser.add_argument('--outdir', type=str)
+parser.add_argument('--monitor_probs', type=int, default=0)
 
 
 args = parser.parse_args()
@@ -44,6 +46,8 @@ NEG_WEIGHT=args.neg_weight
 BEAMSIZE=args.beamsize
 LOSS_TYPE=args.loss_type
 SPLIT=[float(x) for x in args.split.split(",")]
+MONITOR_PROBS = args.monitor_probs == 1
+OUTDIR = args.outdir
 
 # tokenizer parameters
 CHAR_TOKENIZER = args.char_tokenizer == 1
@@ -100,7 +104,6 @@ for example_type in examples:
   else:
     text_in.concatenate(text_in_curr)
     text_out.concatenate(text_out_curr)
-
 
 tokenizer_in = transformer.MyTokenizer(text_in, MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, CHAR_TOKENIZER)
 tokenizer_out = transformer.MyTokenizer(text_out, MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, CHAR_TOKENIZER)
@@ -170,9 +173,11 @@ if CHECKPOINT_PATH is not None:
 else:
   ckpt_manager = None
 
-
 # train the transformer
-transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE, ckpt_manager=ckpt_manager)
+transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE,
+                  outdir=OUTDIR,
+                  monitor_probs=MONITOR_PROBS,
+                  ckpt_manager=ckpt_manager)
 
 # create a translator
 my_translator = transformer.Translator(tokenizer_in, tokenizer_out, my_transformer)
@@ -187,32 +192,6 @@ def print_translation(sentence, pred_tokens, ground_truth, ispositive):
   print(f'{"Pred length":15s}: {cnt}')
   print(f'{"Ground truth":15s}: {ground_truth}')
   print(f'{"Positive":15s}: {ispositive.numpy()}')
-
-
-# def eval(examples, iterations=10):
-#   inputs = []
-#   for e in examples:
-#     sentence = e["input"]
-#     if sentence in inputs:
-#       continue
-#     else:
-#       inputs.append(sentence)
-
-#     print("---------")
-#     print(f'{"Input:":15s}: {sentence.numpy()}')
-#     outputs = []
-#     for i in range(iterations):
-#       if i==0:
-#         deterministic=True
-#       else:
-#         deterministic=False
-#       pred_tokens, probs = my_translator(tf.constant(sentence), deterministic=deterministic)
-#       prob = np.prod(probs)
-#       text = tf.strings.reduce_join(pred_tokens, separator=' ').numpy()
-#       outputs.append((prob, text))
-#     outputs = sorted(outputs, reverse=True)
-#     for (prob, text) in outputs:
-#       print(f'{prob:.10f}: {text}')
 
 
 def safe_rule(rule, neg_examples):

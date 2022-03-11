@@ -58,9 +58,20 @@ def exp1():
     data = {"input":[in1, in2], "output": [out1, out2]}
     data["output"] = tf.ragged.stack(data["output"])
     dataset = tf.data.Dataset.from_tensor_slices(data)
-    tf.data.experimental.save(dataset, "synthetic/exp1/pos")
+    tf.data.experimental.save(dataset, "synthetic/syn1/pos")
 
-exp1()
+def exp2():
+    # one datapoint
+    # "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
+    in1 = "SOS x EOS"
+    out1 = ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
+    data = {"input":[in1], "output": [out1]}
+    data["output"] = tf.ragged.stack(data["output"])
+    dataset = tf.data.Dataset.from_tensor_slices(data)
+    tf.data.experimental.save(dataset, "synthetic/syn2/pos")
+
+    
+exp2()
 
 xxx
     

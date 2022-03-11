@@ -40,10 +40,10 @@ def LogOneMinusSumExp(logp, mask):
         # grad = 1/(1-sum(exp(logp))) * -exp(logp)
         coeff = 1.0 / (1e-5 + invprob)
         probs2 = tf.expand_dims(probs, axis=-1)
-        grad = - coeff * probs
-        return upstream * grad, tf.constant(0.0)
+        g = - coeff * probs
+        return upstream * g, tf.constant(0.0)
 
-    return y, grad
+    return y, g
 
 
 # log probability ratio preserving (prp) loss
@@ -57,8 +57,28 @@ def log_prp_loss(logprobs, mask_nonzero):
     log_d = tf.reduce_sum(logprobs, axis=-1) / k
     loss = log_n - log_d
     loss = k * loss
+    loss = tf.maximum(0.0, loss)
     return loss
 
+@tf.custom_gradient
+def log_prp_loss2(logprobs, mask_nonzero):
+    # loss = (1 - sum probs) / prod(pow(probs, 1/k))
+    # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
+    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    probs = mask_nonzero * tf.math.exp(logprobs)
+    invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
+    log_n = tf.math.log(invprob)
+    log_d = tf.reduce_sum(logprobs, axis=-1, keepdims=True) / k
+    loss = log_n - log_d
+    loss = k * loss
+
+    def grad(upstream):
+        # grad = k * p/invprob - 1
+        g = - k * probs / invprob - 1.0
+        g *= mask_nonzero
+        return upstream * g, tf.constant(0.0)
+
+    return loss, grad
 
 def loss_function(real, pred, ispositive, loss_type):
     mask_zero = tf.math.equal(real, 0)
@@ -71,7 +91,6 @@ def loss_function(real, pred, ispositive, loss_type):
     
     # focus on the logprobs of real sequence
     logprobs = tf.gather(logprobs, real, batch_dims=3) #(support * bs * seq)
-    # print("logprob", tf.transpose(logprobs, perm=[1,0,2])[0])
 
     # replace padding element probs with 1 for multiplication
     logprobs *= mask_nonzero
@@ -79,10 +98,11 @@ def loss_function(real, pred, ispositive, loss_type):
 
     sequence_logprobs = tf.transpose(sequence_logprobs, perm=[1,0]) # (bs * support)
     mask_nonzero_sequence = tf.transpose(mask_nonzero_sequence, perm=[1,0]) # (bs * support)
+    sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
 
     # reduce logprobs for all supporting sequences, removing padding sequences
     datapoint_logprobs = LogSumExp(sequence_logprobs, -1, mask_nonzero_sequence) #(bs,)
-    datapoint_probs = tf.math.exp(datapoint_logprobs) #(bs,)
+    datapoint_probs = tf.reduce_sum(sequence_probs, axis=-1)
 
     if loss_type=="nll":
         if ispositive:
@@ -92,15 +112,16 @@ def loss_function(real, pred, ispositive, loss_type):
             
     elif loss_type=="prp": # probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
-        sequence_probs = tf.math.exp(sequence_logprobs)
         loss = prp_loss(sequence_probs, mask_nonzero_sequence)
+        loss *= tf.stop_gradient(1.0-datapoint_probs)
         if not ispositive:
             loss = - loss
         
     elif loss_type=="lprp": # # log probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
         # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
-        loss = log_prp_loss(sequence_logprobs, mask_nonzero_sequence)
+        loss = log_prp_loss2(sequence_logprobs, mask_nonzero_sequence)
+        loss *= tf.stop_gradient(1.0-datapoint_probs)
         if not ispositive:
             loss = tf.maximum(0.0, -loss + 30.0)
     else:
@@ -109,4 +130,4 @@ def loss_function(real, pred, ispositive, loss_type):
 
     loss = tf.reduce_mean(loss)
     probs = tf.reduce_mean(datapoint_probs)
-    return loss, probs
+    return loss, probs, sequence_probs

@@ -134,9 +134,6 @@ else:
   
 pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
 
-for p in pos_batches:
-  print(p)
-
 
 # create optimizer
 if LR_TYPE == "custom":

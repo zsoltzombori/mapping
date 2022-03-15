@@ -129,5 +129,6 @@ def loss_function(real, pred, ispositive, loss_type):
             
 
     loss = tf.reduce_mean(loss)
+    # print("datapoint_probs: ", datapoint_probs.numpy())
     probs = tf.reduce_mean(datapoint_probs)
     return loss, probs, sequence_probs

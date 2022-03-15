@@ -569,7 +569,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_neg_probs(neg_probs)
 
         if monitor_probs:
-            monitor.update(inp, pos_sequence_probs)
+            monitor.update(inp, pos_tar_real, pos_sequence_probs)
         
         return pos_predictions
 
@@ -597,7 +597,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_pos_probs(pos_probs)
             
         if monitor_probs:
-            monitor.update(inp, pos_sequence_probs)
+            monitor.update(inp, pos_tar_real, pos_sequence_probs)
         
         return pos_predictions
 
@@ -629,7 +629,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
             print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
     if monitor_probs:
-        monitor.plot(filename=outdir + "/probchange.png")
+        monitor.plot(filename=outdir + "/probchange.png", k=1)
 
 
 def show_loss(epoch=None, batch=None,start=None, prefix=""):

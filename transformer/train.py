@@ -32,6 +32,7 @@ parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lpr
 parser.add_argument('--split', type=str, default="0.7,0.15,0.15")
 parser.add_argument('--outdir', type=str)
 parser.add_argument('--monitor_probs', type=int, default=0)
+parser.add_argument('--seed', type=int, default=1000)
 
 
 args = parser.parse_args()
@@ -74,11 +75,11 @@ NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
 # other
-CHECKPOINT_PATH=args.checkpoint_path
+CHECKPOINT_PATH=None #args.checkpoint_path
 BUFFER_SIZE = 200000
 REMOVE_ARGS = args.remove_args == 1
 
-tf.random.set_seed(1000)
+tf.random.set_seed(args.seed)
 
 # load data
 examples, max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c = transformer.load_data(DATADIR, BUFFER_SIZE, split=SPLIT)
@@ -132,6 +133,9 @@ else:
 
   
 pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
+
+for p in pos_batches:
+  print(p)
 
 
 # create optimizer
@@ -233,6 +237,8 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
     for i, (prob, text, isvalid, rule) in enumerate(translations):
       # if not isvalid:
       #   continue
+
+      # print("xxx", prob, text)
       
       if firstrule is None:
         firstrule = text

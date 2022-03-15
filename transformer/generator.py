@@ -47,10 +47,10 @@ def create_node(probs, nodes):
     result = [(p,n) for (p,n) in zip(probs, nodes)]
     return result
 
-def exp1():
-    # two datapoints
-    # "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
-    # "SOS y EOS" -> ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
+# two datapoints
+# "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
+# "SOS y EOS" -> ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
+def exp1(outdir):
     in1 = "SOS x EOS"
     out1 = ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
     in2 = "SOS y EOS"
@@ -58,20 +58,55 @@ def exp1():
     data = {"input":[in1, in2], "output": [out1, out2]}
     data["output"] = tf.ragged.stack(data["output"])
     dataset = tf.data.Dataset.from_tensor_slices(data)
-    tf.data.experimental.save(dataset, "synthetic/syn1/pos")
+    tf.data.experimental.save(dataset, outdir)
 
-def exp2():
-    # one datapoint
-    # "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
-    in1 = "SOS x EOS"
-    out1 = ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
-    data = {"input":[in1], "output": [out1]}
+# exp1(outdir="synthetic/syn1/pos")
+
+# several datapoints with the same input
+def exp2(outdir, alternatives=0, constraints=10):
+    data = {"input":[], "output": []}
+    inp = "SOS x EOS"
+    good = "SOS a EOS"
+    for i in range(constraints):
+        prefix = chr(ord('a')+i+1)
+        out = ["SOS " + prefix + str(j) + " EOS" for j in range(alternatives)]
+        for j in range(constraints):
+            almost_good = "SOS a" + str(j) + " EOS"
+            if j != i:
+                out.append(almost_good)
+        out.append(good)
+        print("out: ", out)
+        data["input"].append(inp)
+        data["output"].append(out)
+        
     data["output"] = tf.ragged.stack(data["output"])
     dataset = tf.data.Dataset.from_tensor_slices(data)
-    tf.data.experimental.save(dataset, "synthetic/syn2/pos")
+    tf.data.experimental.save(dataset, outdir)
 
+# exp2(outdir="synthetic/syn2_10/pos", alternatives=10, constraints=10)
+# exp2(outdir="synthetic/syn2_50/pos", alternatives=10, constraints=50)
+# exp2(outdir="synthetic/syn2_100/pos", alternatives=10, constraints=100)
+
+# several datapoints with the same input and conflicting outputs
+def exp3(outdir):
+    inp = "SOS x EOS"
+    out = [
+        ["a", "b", "c"],
+        ["a", "b", "d"],
+        ["a", "b", "e"],
+        ["a", "c", "d"],
+        ["c", "e", "f"]
+    ]
+    out = [["SOS " + x + " EOS" for x in o] for o in out]
+
+    print("out: ", out)
     
-exp2()
+    data = {"input":[inp] * len(out), "output": out}        
+    data["output"] = tf.ragged.stack(data["output"])
+    dataset = tf.data.Dataset.from_tensor_slices(data)
+    tf.data.experimental.save(dataset, outdir)
+
+exp3(outdir="synthetic/syn3/pos")
 
 xxx
     

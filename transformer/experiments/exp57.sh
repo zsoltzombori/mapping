@@ -1,13 +1,7 @@
-# parent: exp54
-# basedir: synthetic -> outdata/cmt_renamed
-# schema: syn3 -> cmt_renamed
-# epochs: 1000 -> 200
-# num_layers: 2 -> 4
-# lr: 0.00001 -> 0.0001
-# split: 1.0,0,0 -> 0.7,0.15,0.15
-# batch_size: 20 -> 40
+# parent: exp56
+# loss_type: lprp -> nll
 
-exp=56
+exp=57
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"
 epochs=200
@@ -21,7 +15,7 @@ optimizer=adamax
 beta1=0.3
 beta2=0.9
 CHAR_TOKENIZER=0
-loss_type="lprp"
+loss_type="nll"
 split="0.7,0.15,0.15"
 monitor_probs=0
 GPU=6

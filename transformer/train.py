@@ -75,7 +75,7 @@ NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
 # other
-CHECKPOINT_PATH=None #args.checkpoint_path
+CHECKPOINT_PATH=args.checkpoint_path
 BUFFER_SIZE = 200000
 REMOVE_ARGS = args.remove_args == 1
 

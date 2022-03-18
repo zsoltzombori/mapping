@@ -123,7 +123,7 @@ def loss_function(real, pred, ispositive, loss_type):
         loss = log_prp_loss2(sequence_logprobs, mask_nonzero_sequence)
         loss *= tf.stop_gradient(1.0-datapoint_probs)
         if not ispositive:
-            loss = tf.maximum(0.0, -loss + 30.0)
+            loss = tf.maximum(0.0, -loss + 100.0)
     else:
         assert False, "Unknown loss type" + loss_type
             

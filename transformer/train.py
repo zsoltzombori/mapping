@@ -75,7 +75,7 @@ NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
 # other
-CHECKPOINT_PATH=args.checkpoint_path
+CHECKPOINT_PATH=None # args.checkpoint_path
 BUFFER_SIZE = 200000
 REMOVE_ARGS = args.remove_args == 1
 
@@ -293,8 +293,6 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
   print("Positive top1: {}, top5: {}, top10: {}".format(top1_pos / count, top5_pos / count, top10_pos / count))
   print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
 
-print("\n\nEVALUATION on the train set")
-eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 
 print("\n\nEVALUATION on the validation set")
 if neg_examples is not None:
@@ -303,3 +301,5 @@ else:
   neg_examples_val = None  
 eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 
+# print("\n\nEVALUATION on the train set")
+# eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

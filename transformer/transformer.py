@@ -4,7 +4,7 @@ from losses import *
 
 NEG_CLIP=0.5
 ENT_WEIGHT=0.0
-CLIP_NORM = 0.1
+CLIP_NORM = 0.01
 
 LENGTH_PENALTY=0.5
 SUPPORT_SIZE=50
@@ -629,7 +629,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
             print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
     if monitor_probs:
-        monitor.plot(filename=outdir + "/probchange.png", k=1)
+        monitor.plot(filename=outdir + "/probchange.png", k=1, ratios=True)
 
 
 def show_loss(epoch=None, batch=None,start=None, prefix=""):

@@ -67,6 +67,7 @@ def log_prp_loss2(logprobs, mask_nonzero):
     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
     probs = mask_nonzero * tf.math.exp(logprobs)
     invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
+    invprob += 1e-5
     log_n = tf.math.log(invprob)
     log_d = tf.reduce_sum(logprobs, axis=-1, keepdims=True) / k
     loss = log_n - log_d
@@ -121,9 +122,11 @@ def loss_function(real, pred, ispositive, loss_type):
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
         # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
         loss = log_prp_loss2(sequence_logprobs, mask_nonzero_sequence)
-        loss *= tf.stop_gradient(1.0-datapoint_probs)
-        if not ispositive:
-            loss = tf.maximum(0.0, -loss + 100.0)
+        if ispositive:
+            loss *= tf.stop_gradient(1.0-datapoint_probs)
+        else:
+            loss *= - tf.stop_gradient(datapoint_probs)
+            # loss = tf.maximum(0.0, -loss + 1000.0)
     else:
         assert False, "Unknown loss type" + loss_type
             

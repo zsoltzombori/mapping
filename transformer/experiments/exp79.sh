@@ -4,11 +4,11 @@
 exp=79
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"
-epochs=200
+epochs=500
 batch_size=40
 neg_weight=3.0
 num_layers=4
-d_model=256
+d_model=128
 lr=0.0001
 lr_decay_steps=30
 optimizer=adamax
@@ -27,8 +27,8 @@ checkpoint_dir="checkpoints/exp${exp}"
 datadir="${basedir}/${schema}"
 outdir_base="out/exp${exp}"
 
-weights=( 100 500 1000 10000 )
-gpus=( 7 6 7 6 )
+weights=( 1 10 100 1000 )
+gpus=( 6 5 4 3 )
 
 for i in "${!weights[@]}";
 do

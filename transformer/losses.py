@@ -34,7 +34,6 @@ def LogOneMinusSumExp(logp, mask):
     probs = mask * tf.math.exp(logp)
     invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
     y = tf.math.log(1e-5 + invprob)
-    y = tf.clip_by_value(y, -10000, 0)
 
     def grad(upstream):
         # grad = 1/(1-sum(exp(logp))) * -exp(logp)
@@ -43,21 +42,27 @@ def LogOneMinusSumExp(logp, mask):
         g = - coeff * probs
         return upstream * g, tf.constant(0.0)
 
-    return y, g
+    return y, grad
 
 
 # log probability ratio preserving (prp) loss
 # log probs is (bs * support_size)
-def log_prp_loss(logprobs, mask_nonzero):
+def log_prp_loss(logprobs, mask_nonzero, ispositive):
     # loss = (1 - sum probs) / prod(pow(probs, 1/k))
     # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
 
-    log_n = LogOneMinusSumExp(logprobs, mask_nonzero)      
-    log_d = tf.reduce_sum(logprobs, axis=-1) / k
-    loss = log_n - log_d
-    loss = k * loss
-    loss = tf.maximum(0.0, loss)
+    log_n = LogOneMinusSumExp(logprobs, mask_nonzero)
+            
+    if ispositive:
+        log_d = tf.reduce_sum(logprobs, axis=-1) / k
+        loss = log_n - log_d
+    else:
+        log_d = tf.reduce_sum(tf.maximum(tf.math.log(1e-5), logprobs), axis=-1) / k
+        loss = log_d - log_n
+        loss = tf.maximum(0.0, loss+100)
+
+    # loss = k * loss
     return loss
 
 @tf.custom_gradient
@@ -121,12 +126,7 @@ def loss_function(real, pred, ispositive, loss_type):
     elif loss_type=="lprp": # # log probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
         # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
-        loss = log_prp_loss2(sequence_logprobs, mask_nonzero_sequence)
-        if ispositive:
-            loss *= tf.stop_gradient(1.0-datapoint_probs)
-        else:
-            loss *= - tf.stop_gradient(datapoint_probs)
-            # loss = tf.maximum(0.0, -loss + 1000.0)
+        loss = log_prp_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
     else:
         assert False, "Unknown loss type" + loss_type
             

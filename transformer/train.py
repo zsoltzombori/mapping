@@ -235,7 +235,7 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
       # if not isvalid:
       #   continue
 
-      # print("xxx", prob, text)
+      print("xxx", prob, text)
       
       if firstrule is None:
         firstrule = text
@@ -301,5 +301,5 @@ else:
   neg_examples_val = None  
 eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 
-# print("\n\nEVALUATION on the train set")
-# eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+print("\n\nEVALUATION on the train set")
+eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

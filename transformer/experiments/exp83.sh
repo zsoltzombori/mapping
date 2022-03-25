@@ -4,7 +4,7 @@
 exp=83
 schema="cmt_renamed_PaperAbstract"
 basedir="outdata/cmt_renamed"
-epochs=200
+epochs=100
 batch_size=40
 neg_weight=3.0
 num_layers=4

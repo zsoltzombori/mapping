@@ -33,11 +33,12 @@ def LogOneMinusSumExp(logp, mask):
     # y = log(1-sum(exp(logp)))
     probs = mask * tf.math.exp(logp)
     invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
-    y = tf.math.log(1e-5 + invprob)
+    invprob += 1e-20
+    y = tf.math.log(1e-20 + invprob)
 
     def grad(upstream):
         # grad = 1/(1-sum(exp(logp))) * -exp(logp)
-        coeff = 1.0 / (1e-5 + invprob)
+        coeff = 1.0 / invprob
         probs2 = tf.expand_dims(probs, axis=-1)
         g = - coeff * probs
         return upstream * g, tf.constant(0.0)
@@ -58,11 +59,12 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive):
         log_d = tf.reduce_sum(logprobs, axis=-1) / k
         loss = log_n - log_d
     else:
+        # TODO negatives
         log_d = tf.reduce_sum(tf.maximum(tf.math.log(1e-10), logprobs), axis=-1) / k
         loss = log_d - log_n
         # loss = tf.maximum(0.0, loss+100)
 
-    # loss = k * loss
+    loss = k * loss
     return loss
 
 @tf.custom_gradient
@@ -72,16 +74,18 @@ def log_prp_loss2(logprobs, mask_nonzero):
     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
     probs = mask_nonzero * tf.math.exp(logprobs)
     invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
-    invprob += 1e-5
+    invprob += 1e-20
     log_n = tf.math.log(invprob)
     log_d = tf.reduce_sum(logprobs, axis=-1, keepdims=True) / k
     loss = log_n - log_d
     loss = k * loss
 
     def grad(upstream):
-        # grad = k * p/invprob - 1
-        g = - k * probs / invprob - 1.0
+        # grad = p^2/invprob - 1/k
+        # grad *= k
+        g = (- probs / invprob) - 1.0 / k
         g *= mask_nonzero
+        g *= k
         return upstream * g, tf.constant(0.0)
 
     return loss, grad

@@ -1,20 +1,33 @@
 import numpy as np
 import tensorflow as tf
 
+from monitor import MonitorProbs
+
 LR=0.01
-EPOCHS=50
-BATCH_SIZE=3
-LOSS_TYPE="lprp" #nll, lprp, lprp2
+EPOCHS=200
+BATCH_SIZE=1
+LOSS_TYPE="nll" #nll, lprp, lprp2
 PRETRAIN=10
+MONITOR=True
+
+data1 = [
+    (1, (7,8,9)),
+]
+data_pretrain1 = [
+    (1, (7,)),
+]
+
 
 data_pretrain = [
     (1, (2,3)),
-    ]
+]
 
 data = [
     (1, (1,2)),
     (1, (1,3)),
-    ]
+]
+
+data = data1
 
 # count num_classes
 num_classes = 0
@@ -112,11 +125,14 @@ def log_prp_loss2(pred, real):
 model = tf.keras.Sequential()
 model.add(tf.keras.layers.Embedding(5, 10, input_length=1))
 model.add(tf.keras.layers.Flatten())
-model.add(tf.keras.layers.Dense(350, input_shape=(1, ), activation='relu'))
+# model.add(tf.keras.layers.Dense(350, input_shape=(1, ), activation='relu'))
 model.add(tf.keras.layers.Dense(50, activation='relu'))
 model.add(tf.keras.layers.Dense(num_classes, activation='softmax'))
 model.compile()
 model.summary()
+
+if MONITOR:
+    monitor = MonitorProbs()
 
 for e in range(EPOCHS):
     print("Epoch: ", e)
@@ -125,8 +141,10 @@ for e in range(EPOCHS):
     if e < PRETRAIN:
         # take data from data_pretrain
         batches = make_batches(inputs_pretrain, outputs_pretrain, BATCH_SIZE)
+        pretrain_curr = True
     else:
         batches = make_batches(inputs, outputs, BATCH_SIZE)
+        pretrain_curr = False
 
     for (inp, out) in batches:
         with tf.GradientTape() as tape:
@@ -140,6 +158,9 @@ for e in range(EPOCHS):
             train_loss(loss)
             train_probs(probs)
 
+            if MONITOR and not pretrain_curr:
+                monitor.update_mlp(inp, out, seq_probs)
+
             # print("loss", loss.numpy())
             # print("probs", probs.numpy())
             for i, p in zip(inp, seq_probs):
@@ -149,3 +170,6 @@ for e in range(EPOCHS):
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
     print(f'Loss: {train_loss.result():.4f}, Probs {train_probs.result():.3f}')
+
+if MONITOR:
+    monitor.plot("probchange_{}.png".format(LOSS_TYPE), k=1, ratios=True)

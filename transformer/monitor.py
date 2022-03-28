@@ -13,6 +13,28 @@ class MonitorProbs():
         self.outkey2tensor = {}
         self.counter = 0
 
+    def update_mlp(self, inputs, outputs, sequence_probs):
+        #inputs: bs * 1
+        # outputs: bs * tokens
+        # sequence_probs: bs * tokens
+        sequence_probs = sequence_probs.numpy()
+        self.counter += 1
+        for x, ys, probs in zip(inputs, outputs, sequence_probs):
+            key = x[0]
+            if not key in self.key2tensor:
+                self.key2tensor[key] = x
+                self.history[key] = {}
+            for i, (y, prob) in enumerate(zip(ys, probs)):
+                if y == 1:
+                    outkey = i
+                    if not outkey in self.outkey2tensor:
+                        self.outkey2tensor[outkey] = y
+                    if not outkey in self.history[key]:
+                        self.history[key][outkey] = {}
+                    self.history[key][outkey][self.counter] =  prob
+        
+    
+
     def update(self, inputs, outputs, sequence_probs):
         #inputs: bs * seq len
         # outputs: support * bs * seq len
@@ -83,6 +105,8 @@ class MonitorProbs():
                         prob_ratios.append(prob2 / prob1)
                 steps = steps[average-1:]
                 prob_ratios = moving_average(prob_ratios, average)
+                ax = plt.gca()
+                ax.set_ylim([0, 14])
                 plot.plot(steps, prob_ratios)
         
     def plot(self, filename, k=1, ratios=False):

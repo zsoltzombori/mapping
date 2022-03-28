@@ -102,6 +102,8 @@ class MonitorProbs():
             ax2 = axs[1]
             ax2.set_xlabel("Update steps")
             ax2.set_ylabel("Probability ratio")
+            ax2.yaxis.set_label_position("right")
+            ax2.yaxis.tick_right()
             self.plot_one_ratio(ax2, keys[0])
         elif ratios == False:
             fig, axs = plt.subplots(k)
@@ -120,6 +122,8 @@ class MonitorProbs():
                 self.plot_one(ax1, keys[i])
                 ax2.set_xlabel("Update steps")
                 ax2.set_ylabel("Probability ratio")
+                ax2.yaxis.set_label_position("right")
+                ax2.yaxis.tick_right()
                 self.plot_one_ratio(ax2, keys[i])
 
         plt.savefig(filename)

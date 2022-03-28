@@ -58,9 +58,9 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive):
         log_d = tf.reduce_sum(logprobs, axis=-1) / k
         loss = log_n - log_d
     else:
-        log_d = tf.reduce_sum(tf.maximum(tf.math.log(1e-5), logprobs), axis=-1) / k
+        log_d = tf.reduce_sum(tf.maximum(tf.math.log(1e-10), logprobs), axis=-1) / k
         loss = log_d - log_n
-        loss = tf.maximum(0.0, loss+100)
+        # loss = tf.maximum(0.0, loss+100)
 
     # loss = k * loss
     return loss

@@ -618,10 +618,15 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
             for (pos_inp, pos_tar) in pos_batches:
                 train_step_noneg(pos_inp, pos_tar)
         else:
-            for ((pos_inp, pos_tar), (neg_inp, neg_tar)) in zip(pos_batches, neg_batches):
-                if pos_inp.shape[0] != neg_inp.shape[0]:
-                    break            
-                train_step(pos_inp, pos_tar, neg_tar)
+            # for ((pos_inp, pos_tar), (neg_inp, neg_tar)) in zip(pos_batches, neg_batches):
+            for (pos_inp, pos_tar) in pos_batches:
+                # print("pos", pos_inp.shape, tf.reduce_sum(pos_inp).numpy())
+                for (neg_inp, neg_tar) in neg_batches:
+                    # print("neg", neg_inp.shape, tf.reduce_sum(neg_inp).numpy())
+                    if pos_inp.shape[0] != neg_inp.shape[0]:
+                        break
+                    else:
+                        train_step(pos_inp, pos_tar, neg_tar)
         show_loss(epoch=epoch, start=start)                           
 
         if (ckpt_manager is not None) and ((epoch + 1) % 5 == 0):

@@ -75,7 +75,7 @@ NUM_HEADS = 8
 DROPOUT_RATE = 0.1
 
 # other
-CHECKPOINT_PATH=None # args.checkpoint_path
+CHECKPOINT_PATH= args.checkpoint_path
 BUFFER_SIZE = 200000
 REMOVE_ARGS = args.remove_args == 1
 
@@ -301,5 +301,5 @@ else:
   neg_examples_val = None  
 eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 
-print("\n\nEVALUATION on the train set")
-eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+#print("\n\nEVALUATION on the train set")
+#eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

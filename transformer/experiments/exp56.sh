@@ -10,7 +10,7 @@
 exp=56
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"
-epochs=200
+epochs=70
 batch_size=40
 neg_weight=3.0
 num_layers=4

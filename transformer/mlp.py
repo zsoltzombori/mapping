@@ -3,51 +3,48 @@ import tensorflow as tf
 
 from monitor import MonitorProbs
 
-LR=0.01
-EPOCHS=200
-BATCH_SIZE=1
-LOSS_TYPE="nll" #nll, lprp, lprp2
-PRETRAIN=10
+LR=0.003
+EPOCHS=300
+BATCH_SIZE=10
+LOSS_TYPE="nll" #nll, prp, prp2
+PRETRAIN=1
 MONITOR=True
 
-data1 = [
+d1 = [
     (1, (7,8,9)),
 ]
-data_pretrain1 = [
+dp1 = [
     (1, (7,)),
 ]
-
-
-data_pretrain = [
-    (1, (2,3)),
+d2 = [
+    (1, (7,8)),
+    (1, (7,9)),
 ]
-
-data = [
-    (1, (1,2)),
-    (1, (1,3)),
+dp2 = [
+    (1, (8,9)),
 ]
+    
 
-data = data1
+def prepare_data(data, data_pretrain):
+    num_classes = 0
+    for d in data + data_pretrain:
+        out = d[1]
+        num_classes = max(num_classes, max(out))
+    num_classes += 1
+    # print("Output space size: ", num_classes)
 
-# count num_classes
-num_classes = 0
-for d in data + data_pretrain:
-    out = d[1]
-    num_classes = max(num_classes, max(out))
-num_classes += 1
-print("Output space size: ", num_classes)
+    def aux(data):    
+        inputs = []
+        outputs = []
+        for d in data:
+            inputs.append(float(d[0]))
+            o = [int(x in d[1]) for x in range(num_classes)]
+            outputs.append(o)
+        return inputs, outputs
 
-def prepare_data(data):    
-    inputs = []
-    outputs = []
-    for d in data:
-        inputs.append(float(d[0]))
-        o = [int(x in d[1]) for x in range(num_classes)]
-        outputs.append(o)
-    return inputs, outputs
-
-inputs, outputs = prepare_data(data)
-inputs_pretrain, outputs_pretrain = prepare_data(data_pretrain)
+    inputs, outputs = aux(data)
+    inputs_pretrain, outputs_pretrain = aux(data_pretrain)
+    return(inputs, outputs), (inputs_pretrain, outputs_pretrain), num_classes
 
 
     
@@ -64,12 +61,6 @@ def make_batches(inputs, outputs, batch_size):
         o = np.array(o)
         yield (i, o)
 
-
-
-optimizer = tf.keras.optimizers.Adamax(LR, beta_1=0.3, beta_2=0.9, epsilon=1e-7)
-optimizer = tf.keras.optimizers.Adam(LR)
-train_loss = tf.keras.metrics.Mean(name='train_loss')
-train_probs = tf.keras.metrics.Mean(name='train_probs')
 
 def nll_loss(pred, real):
     probs = real * pred
@@ -120,56 +111,97 @@ def log_prp_loss2(pred, real):
 
     return loss, grad
 
+def build_model(num_classes):
+    model = tf.keras.Sequential()
+    model.add(tf.keras.layers.Embedding(5, 10, input_length=1))
+    model.add(tf.keras.layers.Flatten())
+    # model.add(tf.keras.layers.Dense(350, input_shape=(1, ), activation='relu'))
+    model.add(tf.keras.layers.Dense(50, activation='relu'))
+    model.add(tf.keras.layers.Dense(num_classes, activation='softmax'))
+    model.compile()
+    model.summary()
+    return model
 
-# Create the model
-model = tf.keras.Sequential()
-model.add(tf.keras.layers.Embedding(5, 10, input_length=1))
-model.add(tf.keras.layers.Flatten())
-# model.add(tf.keras.layers.Dense(350, input_shape=(1, ), activation='relu'))
-model.add(tf.keras.layers.Dense(50, activation='relu'))
-model.add(tf.keras.layers.Dense(num_classes, activation='softmax'))
-model.compile()
-model.summary()
+def train(model, data, data_pretrain, pretrain_epochs, loss_type, suffix):
+    optimizer = tf.keras.optimizers.Adamax(LR, beta_1=0.3, beta_2=0.9, epsilon=1e-7)
+    optimizer = tf.keras.optimizers.Adam(LR)
+    train_loss = tf.keras.metrics.Mean(name='train_loss')
+    train_probs = tf.keras.metrics.Mean(name='train_probs')
 
-if MONITOR:
-    monitor = MonitorProbs()
+    if MONITOR:
+        monitor = MonitorProbs()
 
-for e in range(EPOCHS):
-    print("Epoch: ", e)
-    train_loss.reset_states()
-    train_probs.reset_states()
-    if e < PRETRAIN:
-        # take data from data_pretrain
-        batches = make_batches(inputs_pretrain, outputs_pretrain, BATCH_SIZE)
-        pretrain_curr = True
-    else:
-        batches = make_batches(inputs, outputs, BATCH_SIZE)
-        pretrain_curr = False
+    for e in range(EPOCHS):
+        print("Epoch: ", e)
+        train_loss.reset_states()
+        train_probs.reset_states()
+        if e < pretrain_epochs:
+            # take data from data_pretrain
+            batches = make_batches(data_pretrain[0], data_pretrain[1], BATCH_SIZE)
+            pretrain_curr = True
+            print("pretrain")
+        else:
+            batches = make_batches(data[0], data[1], BATCH_SIZE)
+            pretrain_curr = False
 
-    for (inp, out) in batches:
-        with tf.GradientTape() as tape:
-            predictions = model(inp)
-            if LOSS_TYPE == "nll":
-                loss, probs, seq_probs = nll_loss(predictions, out)
-            else:
-                loss, probs, seq_probs = log_prp_loss(predictions, out)
-            if LOSS_TYPE == "lprp2":
-                loss = log_prp_loss2(predictions, out)
-            train_loss(loss)
-            train_probs(probs)
+        for (inp, out) in batches:
+            with tf.GradientTape() as tape:
+                predictions = model(inp)
+                if loss_type == "nll":
+                    loss, probs, seq_probs = nll_loss(predictions, out)
+                else:
+                    loss, probs, seq_probs = log_prp_loss(predictions, out)
+                if loss_type == "prp2":
+                    loss = log_prp_loss2(predictions, out)
+                train_loss(loss)
+                train_probs(probs)
 
-            if MONITOR and not pretrain_curr:
-                monitor.update_mlp(inp, out, seq_probs)
+                if MONITOR and not pretrain_curr:
+                    print("update", e)
+                    monitor.update_mlp(inp, out, seq_probs)
 
-            # print("loss", loss.numpy())
-            # print("probs", probs.numpy())
-            for i, p in zip(inp, seq_probs):
-                p2 = np.floor(p.numpy() * 1000) / 1000
-                print(f'   {i} -> {p2}')
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+                # print("loss", loss.numpy())
+                # print("probs", probs.numpy())
+                for i, p in zip(inp, seq_probs):
+                    p2 = np.floor(p.numpy() * 1000) / 1000
+                    print(f'   {i} -> {p2}')
+            gradients = tape.gradient(loss, model.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-    print(f'Loss: {train_loss.result():.4f}, Probs {train_probs.result():.3f}')
+        print(f'Loss: {train_loss.result():.4f}, Probs {train_probs.result():.3f}')
+    if MONITOR:
+        monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=False)
 
-if MONITOR:
-    monitor.plot("probchange_{}.png".format(LOSS_TYPE), k=1, ratios=True)
+def run(exp):
+    if exp==1:
+        d = d1
+        dp = dp1
+        PRETRAIN=1
+        LOSS_TYPE="nll"
+        
+    elif exp==2:
+        d = d1
+        dp = dp1
+        PRETRAIN=1
+        LOSS_TYPE="prp"
+
+    if exp==3:
+        d = d2
+        dp = dp2
+        PRETRAIN=100
+        LOSS_TYPE="nll"
+        
+    elif exp==4:
+        d = d2
+        dp = dp2
+        PRETRAIN=100
+        LOSS_TYPE="prp"
+
+    data, data_pretrain, num_classes = prepare_data(d, dp)
+    model = build_model(num_classes)
+    train(model, data, data_pretrain, PRETRAIN, LOSS_TYPE, "{}_{}".format(exp, LOSS_TYPE))
+
+#run(1)
+#run(2)
+run(3)
+run(4)

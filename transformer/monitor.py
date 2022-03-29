@@ -5,6 +5,12 @@ import matplotlib.pyplot as plt
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
 
+def nearest_step(d, step):
+    keys = np.array(list(d.keys()))
+    index = (np.abs(keys - step)).argmin()
+    return keys[index]
+    
+
 class MonitorProbs():
 
     def __init__(self):
@@ -28,7 +34,7 @@ class MonitorProbs():
                 if y == 1:
                     outkey = i
                     if not outkey in self.outkey2tensor:
-                        self.outkey2tensor[outkey] = y
+                        self.outkey2tensor[outkey] = outkey
                     if not outkey in self.history[key]:
                         self.history[key][outkey] = {}
                     self.history[key][outkey][self.counter] =  prob
@@ -61,7 +67,7 @@ class MonitorProbs():
                 self.history[key][outkey][self.counter] =  prob.numpy()
             
 
-    def plot_one(self, plot, key, showsum=True, average=10):
+    def plot_one(self, plot, key, showsum=False, average=10):
         sumprob = {}
         for outkey in self.history[key]:
             prob_hist = self.history[key][outkey]
@@ -77,14 +83,14 @@ class MonitorProbs():
                 probs.append(prob)
             steps = steps[average-1:]
             probs = moving_average(probs, average)
-            plot.plot(steps, probs) # , label=str(self.outkey2tensor[outkey]))
+            plot.plot(steps, probs, label=outkey) # , label=str(self.outkey2tensor[outkey]))
         keys = sorted(list(sumprob.keys()))
         values = [sumprob[k] for k in keys]
         if showsum:
             keys = keys[average-1:]
             values = moving_average(values, average)
             plot.plot(keys, values, linestyle='dashed')
-        # plot.legend(loc='best')
+        plot.legend(loc='right')
 
     def plot_one_ratio(self, plot, key, average=10):
         outkeys = list(self.history[key].keys())
@@ -93,21 +99,31 @@ class MonitorProbs():
             for j in range(i+1, len(outkeys)):
                 outkey2 = outkeys[j]
                 print("keys: ", self.outkey2tensor[outkey1], self.outkey2tensor[outkey2])
-                
+
+                if outkey1 < outkey2:
+                    exp = 1
+                    label = "{}/{}".format(outkey1, outkey2)
+                else:
+                    exp = -1
+                    label = "{}/{}".format(outkey2, outkey1)
+                    
                 prob_hist2 = self.history[key][outkey2]
                 steps = []
                 prob_ratios = []
                 for step in prob_hist1:
                     prob1 = prob_hist1[step]
-                    if (prob1 > 0) and (step in prob_hist2):
-                        prob2 = prob_hist2[step]                    
+                    step2 = nearest_step(prob_hist2, step)
+                    prob2 = prob_hist2[step2]
+                    if prob1 > 0 and prob2 > 0:
                         steps.append(step)
-                        prob_ratios.append(prob2 / prob1)
+                        ratio = (prob1/prob2) ** exp
+                        prob_ratios.append(ratio)
                 steps = steps[average-1:]
                 prob_ratios = moving_average(prob_ratios, average)
                 ax = plt.gca()
-                ax.set_ylim([0, 14])
-                plot.plot(steps, prob_ratios)
+                ax.set_ylim([0, 10])
+                plot.plot(steps, prob_ratios, label=label)
+                plot.legend(loc='right')
         
     def plot(self, filename, k=1, ratios=False):
         keys = list(self.history.keys())

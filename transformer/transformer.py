@@ -612,8 +612,8 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_neg_loss.reset_states()
         train_pos_probs.reset_states()
         train_neg_probs.reset_states()
-        
 
+        
         if neg_batches is None:
             for (pos_inp, pos_tar) in pos_batches:
                 train_step_noneg(pos_inp, pos_tar)

@@ -1,15 +1,18 @@
 import tensorflow as tf
 
+EPS=1e-30
+logEPS=tf.math.log(EPS)
+
 @tf.custom_gradient
 def LogSumExp(x, axis, mask):
-    y = tf.math.log(1e-5 + tf.reduce_sum(mask * tf.math.exp(x), axis=axis))
-    y = tf.clip_by_value(y, -10000, 0)
+    y = tf.math.log(EPS + tf.reduce_sum(mask * tf.math.exp(x), axis=axis))
+    # y = tf.clip_by_value(y, -10000, 0)
     # y = tf.math.reduce_logsumexp(x, axis=axis)
 
     def grad(upstream):
         x2 = x - tf.reduce_max(x, axis=axis, keepdims=True)
         e_x = tf.exp(x2) * mask
-        softmax = e_x / (1e-5 + tf.reduce_sum(e_x, axis=axis, keepdims=True))
+        softmax = e_x / (EPS + tf.reduce_sum(e_x, axis=axis, keepdims=True))
         softmax *= mask
         return tf.expand_dims(upstream, -1) * softmax, tf.constant(0.0), tf.constant(0.0)
 
@@ -33,17 +36,19 @@ def LogOneMinusSumExp(logp, mask):
     # y = log(1-sum(exp(logp)))
     probs = mask * tf.math.exp(logp)
     invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
-    invprob += 1e-20
-    y = tf.math.log(1e-20 + invprob)
+    invprob2 = tf.maximum(EPS, invprob)
+    log_n = tf.math.log(invprob2)
 
     def grad(upstream):
         # grad = 1/(1-sum(exp(logp))) * -exp(logp)
-        coeff = 1.0 / invprob
+        coeff = 1.0 / invprob2
+        coeff *= tf.where(invprob > EPS, 1.0, 0.0)
+        
         probs2 = tf.expand_dims(probs, axis=-1)
         g = - coeff * probs
         return upstream * g, tf.constant(0.0)
 
-    return y, grad
+    return log_n, grad
 
 
 # log probability ratio preserving (prp) loss
@@ -52,17 +57,16 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive):
     # loss = (1 - sum probs) / prod(pow(probs, 1/k))
     # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
-
-    log_n = LogOneMinusSumExp(logprobs, mask_nonzero)
             
     if ispositive:
+        log_n = LogOneMinusSumExp(logprobs, mask_nonzero)
         log_d = tf.reduce_sum(logprobs, axis=-1) / k
         loss = log_n - log_d
     else:
-        # TODO negatives
-        log_d = tf.reduce_sum(tf.maximum(tf.math.log(1e-10), logprobs), axis=-1) / k
-        loss = log_d - log_n
-        # loss = tf.maximum(0.0, loss+100)
+        log_n = LogSumExp(logprobs, -1, mask_nonzero)
+        logprobs2 = tf.maximum(logEPS, logprobs)
+        log_d = tf.reduce_sum(logprobs2, axis=-1, keepdims=True) / k
+        loss = log_d + log_n
 
     loss = k * loss
     return loss
@@ -118,7 +122,8 @@ def loss_function(real, pred, ispositive, loss_type):
         if ispositive:
             loss = - datapoint_logprobs
         else:
-            loss = tf.maximum(0.0, datapoint_logprobs + 30.0)
+            datapoint_logprobs2 = tf.maximum(logEPS, datapoint_logprobs)
+            loss = datapoint_logprobs2
             
     elif loss_type=="prp": # probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
@@ -136,6 +141,5 @@ def loss_function(real, pred, ispositive, loss_type):
             
 
     loss = tf.reduce_mean(loss)
-    # print("datapoint_probs: ", datapoint_probs.numpy())
     probs = tf.reduce_mean(datapoint_probs)
     return loss, probs, sequence_probs

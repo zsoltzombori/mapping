@@ -1,18 +1,13 @@
-# parent: exp54
-# basedir: synthetic -> outdata/cmt_renamed
-# schema: syn3 -> cmt_renamed
-# epochs: 1000 -> 200
-# num_layers: 2 -> 4
-# lr: 0.00001 -> 0.0001
-# split: 1.0,0,0 -> 0.7,0.15,0.15
-# batch_size: 20 -> 40
+# parent: exp88
+# eps: 1e-20 -> 1e-30
+# epochs: 20 -> 30
 
-exp=56
+exp=89
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"
-epochs=10
+epochs=30
 batch_size=40
-neg_weight=3.0
+neg_weight=3
 num_layers=4
 d_model=128
 lr=0.0001
@@ -24,7 +19,7 @@ CHAR_TOKENIZER=0
 loss_type="lprp"
 split="0.7,0.15,0.15"
 monitor_probs=0
-GPU=5
+GPU=6
 
 echo "Schema $schema"
 echo "GPU $GPU"

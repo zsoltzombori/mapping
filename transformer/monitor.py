@@ -13,16 +13,21 @@ def nearest_step(d, step):
 
 class MonitorProbs():
 
-    def __init__(self):
+    def __init__(self, enabled=True):
+        self.enabled=enabled
         self.history = {}
         self.key2tensor = {}
         self.outkey2tensor = {}
         self.counter = 0
+        
 
     def update_mlp(self, inputs, outputs, sequence_probs):
         #inputs: bs * 1
         # outputs: bs * tokens
         # sequence_probs: bs * tokens
+        if not self.enabled:
+            return
+        
         sequence_probs = sequence_probs.numpy()
         self.counter += 1
         for x, ys, probs in zip(inputs, outputs, sequence_probs):
@@ -45,6 +50,9 @@ class MonitorProbs():
         #inputs: bs * seq len
         # outputs: support * bs * seq len
         # sequence_probs: bs * support
+        if not self.enabled:
+            return
+
         inputs = tf.unstack(inputs)
         outputs = tf.unstack(tf.transpose(outputs, perm=[1,0,2]))
         sequence_probs = tf.unstack(sequence_probs)
@@ -126,6 +134,9 @@ class MonitorProbs():
                 plot.legend(loc='right')
         
     def plot(self, filename, k=1, ratios=False):
+        if not self.enabled:
+            return
+
         keys = list(self.history.keys())
         k = min(k, len(keys))
         

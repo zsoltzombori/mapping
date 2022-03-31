@@ -146,8 +146,8 @@ else:
 if OPTIMIZER == "sgd":
   optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=BETA_1, nesterov=False)
 elif OPTIMIZER == "adam":
-  #optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
-  optimizer = tf.keras.optimizers.Adam(0.001, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
+  # optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+  optimizer = tf.keras.optimizers.Adam(learning_rate, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
 elif OPTIMIZER == "nadam":
   optimizer = tf.keras.optimizers.Nadam(LR, beta_1=BETA_1, beta_2=BETA_2, epsilon=1e-7)
 elif OPTIMIZER == "adamax":
@@ -179,6 +179,8 @@ transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, N
                   outdir=OUTDIR,
                   monitor_probs=MONITOR_PROBS,
                   ckpt_manager=ckpt_manager)
+
+my_transformer.summary()
 
 # create a translator
 my_translator = transformer.Translator(tokenizer_in, tokenizer_out, my_transformer)
@@ -235,7 +237,7 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
       # if not isvalid:
       #   continue
 
-      print("xxx", prob, text)
+      # print("xxx", prob, text)
       
       if firstrule is None:
         firstrule = text
@@ -268,13 +270,18 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
     top10_neg += t10n
     
     failure = False
-    if pos_prob > 1-threshold:
+    if t1p == 1:
       pos_success += 1
     else:
       failure = True
-    if neg_prob > threshold:
+    if t1n == 1:
       neg_failure += 1
       failure = True
+
+    if ((count+1) % 10) == 0:
+      print("\n", count)
+      print("Positive top1: {}, top5: {}, top10: {}".format(top1_pos / count, top5_pos / count, top10_pos / count))
+      print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
 
     print(count)
     if failure:

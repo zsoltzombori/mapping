@@ -1,18 +1,14 @@
-# parent: exp54
-# basedir: synthetic -> outdata/cmt_renamed
-# schema: syn3 -> cmt_renamed
-# epochs: 1000 -> 200
-# num_layers: 2 -> 4
-# lr: 0.00001 -> 0.0001
-# split: 1.0,0,0 -> 0.7,0.15,0.15
-# batch_size: 20 -> 40
+# parent: exp86
+# schema: cmt_renamed -> cmt_renamed_Author
+# epochs: 50
+# batch_size: 40 -> 10
 
-exp=56
-schema="cmt_renamed"
+exp=87
+schema="cmt_renamed_Author"
 basedir="outdata/cmt_renamed"
 epochs=10
-batch_size=40
-neg_weight=3.0
+batch_size=10
+neg_weight=3
 num_layers=4
 d_model=128
 lr=0.0001

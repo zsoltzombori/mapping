@@ -6,7 +6,7 @@ import sys
 from monitor import MonitorProbs
 import mlp_data
 
-LR=0.0001
+LR=0.001
 EPOCHS=20
 BATCH_SIZE=40
 LOSS_TYPE="nll" #nll, prp, prp2
@@ -82,7 +82,7 @@ def nll_loss(pred, real, ispositive):
 def log_prp_loss(pred, real, ispositive):
     k = tf.cast(tf.reduce_sum(real, axis=-1, keepdims=True), tf.float32)
     probs = real * pred
-    logprobs = real * tf.math.log(pred)
+    logprobs = real * tf.math.log(EPS+pred)
     sumprobs = tf.reduce_sum(probs, axis=-1)
     sumprobs = tf.reduce_mean(tf.reduce_sum(probs, axis=-1))
 
@@ -100,7 +100,9 @@ def log_prp_loss(pred, real, ispositive):
         logprobs = tf.maximum(-20, logprobs)
         log_d = tf.reduce_sum(logprobs, axis=-1, keepdims=True) / k
         loss  = log_d + log_n
-        
+
+    print("logn", tf.reduce_mean(log_n))
+    print("logd", tf.reduce_mean(log_d))
     loss *= k
     loss = tf.reduce_mean(loss)
     return loss, sumprobs, probs
@@ -163,6 +165,8 @@ def update(model, optimizer, inp, out, loss_type):
         loss, probs, seq_probs = loss_function(predictions, out, loss_type, True)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    print("loss: ", loss.numpy())
+    print("gradient sum: ", [tf.reduce_sum(g).numpy() for g in gradients])
     return loss, (loss, probs, seq_probs), (tf.zeros_like(loss), tf.zeros_like(probs), tf.zeros_like(seq_probs))
 
 def update_neg(model, optimizer, inp, out, nout, loss_type):
@@ -336,4 +340,4 @@ def run(exp):
 #run(5)
 #run(6)
 run(7)
-run(8)
+#run(8)

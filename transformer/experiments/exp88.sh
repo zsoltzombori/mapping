@@ -1,6 +1,8 @@
 # parent: exp86
 # run longer
 
+# this is the best setup so far
+
 exp=88
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"

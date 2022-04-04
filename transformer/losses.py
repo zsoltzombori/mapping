@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-EPS=1e-30
+EPS=1e-20
 logEPS=tf.math.log(EPS)
 
 @tf.custom_gradient

@@ -28,7 +28,7 @@ parser.add_argument('--beta1', type=float, default=0.5)
 parser.add_argument('--beta2', type=float, default=0.999)
 parser.add_argument('--char_tokenizer', type=int, default=0)
 parser.add_argument('--remove_args', type=int, default=0)
-parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lprp"
+parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lprp", "joint_lprp"
 parser.add_argument('--split', type=str, default="0.7,0.15,0.15")
 parser.add_argument('--outdir', type=str)
 parser.add_argument('--monitor_probs', type=int, default=0)
@@ -76,6 +76,8 @@ DROPOUT_RATE = 0.1
 
 # other
 CHECKPOINT_PATH= args.checkpoint_path
+if CHECKPOINT_PATH.lower() == "none":
+  CHECKPOINT_PATH = None
 BUFFER_SIZE = 200000
 REMOVE_ARGS = args.remove_args == 1
 

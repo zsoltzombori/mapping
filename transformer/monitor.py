@@ -179,3 +179,21 @@ class MonitorProbs():
 
         plt.savefig(filename)
         plt.close()
+
+def prp_lnn_vanilla_plot():
+    sum_other_exp_logits = 4
+    logits = np.linspace(-3, 6, num=100)
+    exp_logits = np.exp(logits)
+    probs = exp_logits / (exp_logits + sum_other_exp_logits)
+    loss_nll = -np.log(probs)
+    loss_reg = np.log(1-probs)
+    loss = loss_nll + loss_reg
+    
+    plt.plot(logits, loss_nll, label="nll-loss")
+    plt.plot(logits, loss_reg, label="regularizer term")
+    plt.plot(logits, loss, label="prp-loss")
+    plt.xlabel("Logit of target output")
+    plt.legend(loc='best')
+    plt.savefig("prp_vanilla.png")
+
+# prp_lnn_vanilla_plot()

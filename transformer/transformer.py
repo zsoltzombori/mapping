@@ -551,12 +551,16 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                 
         with tf.GradientTape() as tape:            
             pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
-            # print("pos_loss", pos_loss)
             neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
-            neg_loss, neg_probs, neg_sequence_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type)
-            # print("neg_loss", neg_loss)
-            loss = pos_loss + neg_weight * neg_loss
+
+            if loss_type == "joint_lprp":
+                loss, pos_probs, neg_probs = loss_function_joint(pos_tar_real, neg_tar_real, pos_predictions, neg_predictions)
+                pos_loss = loss
+                neg_loss = loss
+            else:
+                pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
+                neg_loss, neg_probs, neg_sequence_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type)
+                loss = pos_loss + neg_weight * neg_loss
 
         gradients = tape.gradient(loss, transformer.trainable_variables)
         gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]

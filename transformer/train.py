@@ -6,12 +6,24 @@
 # gpu = gpus[np.random.randint(0, gpu_count)]
 # os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
+import tensorflow as tf
+print("GPU available: ", tf.config.list_physical_devices('GPU'))
+physical_devices = tf.config.list_physical_devices('GPU')
+try:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+except:
+  # Invalid device or cannot modify virtual devices once initialized.
+  pass
+
+import logging
+logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 import time
 import sys
-import transformer
-import tensorflow as tf
 import argparse
+
+import transformer
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--datadir', type=str, required=True)
 parser.add_argument('--epochs', type=int, default=100)
@@ -32,7 +44,8 @@ parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lpr
 parser.add_argument('--split', type=str, default="0.7,0.15,0.15")
 parser.add_argument('--outdir', type=str)
 parser.add_argument('--monitor_probs', type=int, default=0)
-parser.add_argument('--seed', type=int, default=1000)
+parser.add_argument('--filter_pn', type=int, default=0)
+parser.add_argument('--seed', type=int, default=100)
 
 
 args = parser.parse_args()
@@ -48,6 +61,7 @@ BEAMSIZE=args.beamsize
 LOSS_TYPE=args.loss_type
 SPLIT=[float(x) for x in args.split.split(",")]
 MONITOR_PROBS = args.monitor_probs == 1
+FILTER_PN = args.filter_pn == 1
 OUTDIR = args.outdir
 
 # tokenizer parameters
@@ -180,6 +194,7 @@ else:
 transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE,
                   outdir=OUTDIR,
                   monitor_probs=MONITOR_PROBS,
+                  filter_pn=FILTER_PN,
                   ckpt_manager=ckpt_manager)
 
 my_transformer.summary()

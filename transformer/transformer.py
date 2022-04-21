@@ -10,7 +10,6 @@ LENGTH_PENALTY=0.5
 SUPPORT_SIZE=50
 
 import collections
-import logging
 import os
 import pathlib
 import re
@@ -27,14 +26,6 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 
 from monitor import MonitorProbs
 
-print("GPU available: ", tf.config.list_physical_devices('GPU'))
-physical_devices = tf.config.list_physical_devices('GPU')
-try:
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-except:
-  # Invalid device or cannot modify virtual devices once initialized.
-  pass
-logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 
 
 ##########################################
@@ -509,6 +500,19 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
 
+def filter_posneg(real_pos, real_neg):
+    # real_pos, real_neg: (support * bs * seq_len)
+
+    pos = tf.expand_dims(real_pos, axis=1)
+    neg = tf.expand_dims( real_neg, axis=0)
+    match = tf.equal(pos, neg)
+    match = tf.math.reduce_all(match, axis=3, keepdims=True)
+    match_pos = tf.math.reduce_any(match, axis=1, keepdims=False)
+    mask = tf.cast(tf.math.logical_not(match_pos), dtype=real_pos.dtype)
+    real_pos *= mask
+    return real_pos, real_neg
+
+
 
 
 # The @tf.function trace-compiles train_step into a TF graph for faster
@@ -531,6 +535,7 @@ train_step_signature_noneg = [
 
 def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type,
           monitor_probs=False,
+          filter_pn=False,
           outdir=None,
           ckpt_manager=None):
 
@@ -552,7 +557,11 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         with tf.GradientTape() as tape:            
             pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
             neg_predictions = tf.map_fn(get_prediction, neg_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=10)
+            
 
+            if filter_pn:
+                pos_tar_real, neg_tar_real = filter_posneg(pos_tar_real, neg_tar_real)
+            
             if loss_type == "joint_lprp":
                 loss, pos_probs, neg_probs = loss_function_joint(pos_tar_real, neg_tar_real, pos_predictions, neg_predictions)
                 pos_loss = loss
@@ -572,7 +581,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_neg_loss(neg_loss)
         train_neg_probs(neg_probs)
 
-        if monitor_probs:
+        if monitor_probs and (loss_type != "joint_lprp"):
             monitor.update(inp, pos_tar_real, pos_sequence_probs)
         
         return pos_predictions

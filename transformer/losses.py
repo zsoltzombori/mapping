@@ -62,13 +62,13 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive):
             
     if ispositive:
         log_n = LogOneMinusSumExp(logprobs, mask_nonzero)
-        log_d = tf.reduce_sum(logprobs, axis=-1) / k
+        log_d = tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
         loss = log_n - log_d
         # loss *= 1.0 - sumprob
     else:
         log_n = LogSumExp(logprobs, -1, mask_nonzero)
         logprobs2 = tf.maximum(logEPS, logprobs)
-        log_d = tf.reduce_sum(logprobs2, axis=-1, keepdims=True) / k
+        log_d = tf.reduce_sum(mask_nonzero * logprobs2, axis=-1, keepdims=True) / k
         loss = log_d + log_n
         # loss *= sumprob
 
@@ -135,9 +135,6 @@ def loss_function(real, pred, ispositive, loss_type):
         
 
 def loss_function_joint(real_pos, real_neg, pred_pos, pred_neg):
-    print(real_pos)
-    print(real_neg)
-    xxx
     pos_logprobs, pos_mask = get_sequence_logprobs(real_pos, pred_pos)
     neg_logprobs, neg_mask = get_sequence_logprobs(real_neg, pred_neg)
 

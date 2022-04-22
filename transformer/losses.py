@@ -138,8 +138,8 @@ def loss_function_joint(real_pos, real_neg, pred_pos, pred_neg):
     pos_logprobs, pos_mask = get_sequence_logprobs(real_pos, pred_pos)
     neg_logprobs, neg_mask = get_sequence_logprobs(real_neg, pred_neg)
 
-    pos_log_d = tf.reduce_sum(pos_logprobs, axis=-1)
-    neg_log_d = tf.reduce_sum(neg_logprobs, axis=-1)
+    pos_log_d = tf.reduce_sum(pos_logprobs * pos_mask, axis=-1)
+    neg_log_d = tf.reduce_sum(neg_logprobs * neg_mask, axis=-1)
 
     pos_k = 1.0 * tf.reduce_sum(pos_mask, axis=-1, keepdims=True)
     neg_k = 1.0 * tf.reduce_sum(neg_mask, axis=-1, keepdims=True)

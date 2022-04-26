@@ -30,9 +30,9 @@ parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=20)
 parser.add_argument('--neg_weight', type=float, default=5.0)
 parser.add_argument('--beamsize', type=int, default=10)
-parser.add_argument('--num_layers', type=int, default=3)
+parser.add_argument('--num_layers', type=str, default="3")
 parser.add_argument('--d_model', type=int, default=256)
-parser.add_argument('--checkpoint_path', type=str, default=None)
+parser.add_argument('--checkpoint_path', type=str, default="none")
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--lr_decay_steps', type=int, default=1000)
 parser.add_argument('--optimizer', type=str, default="sgd")
@@ -46,7 +46,7 @@ parser.add_argument('--outdir', type=str)
 parser.add_argument('--monitor_probs', type=int, default=0)
 parser.add_argument('--filter_pn', type=int, default=0)
 parser.add_argument('--seed', type=int, default=100)
-
+parser.add_argument('--seq_out_len', type=int, default=20)
 
 args = parser.parse_args()
 
@@ -69,7 +69,7 @@ CHAR_TOKENIZER = args.char_tokenizer == 1
 MAX_VOCAB_SIZE_IN = 10000
 MAX_VOCAB_SIZE_OUT = 10000
 MAX_SEQUENCE_LENGTH_IN = 20
-MAX_SEQUENCE_LENGTH_OUT = 20
+MAX_SEQUENCE_LENGTH_OUT = args.seq_out_len
 
 
 # optimizer parameters
@@ -97,6 +97,7 @@ REMOVE_ARGS = args.remove_args == 1
 
 tf.random.set_seed(args.seed)
 
+
 # load data
 examples, max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c = transformer.load_data(DATADIR, BUFFER_SIZE, split=SPLIT)
 
@@ -111,16 +112,16 @@ else:
 # create vectorizers
 first=True
 for example_type in examples:
-  examples_train = examples[example_type][0]
-  text_in_curr = examples_train.map(lambda x: x["input"])
-  text_out_curr = examples_train.map(lambda x: x["output"])
-  if first:
-    text_in = text_in_curr
-    text_out = text_out_curr
-    first=False
-  else:
-    text_in.concatenate(text_in_curr)
-    text_out.concatenate(text_out_curr)
+    examples_train = examples[example_type][0]
+    text_in_curr = examples_train.map(lambda x: x["input"])
+    text_out_curr = examples_train.map(lambda x: x["output"])
+    if first:
+        text_in = text_in_curr
+        text_out = text_out_curr
+        first=False
+    else:
+        text_in = text_in.concatenate(text_in_curr)
+        text_out = text_out.concatenate(text_out_curr)
 
 tokenizer_in = transformer.MyTokenizer(text_in, MAX_VOCAB_SIZE_IN, MAX_SEQUENCE_LENGTH_IN, CHAR_TOKENIZER)
 tokenizer_out = transformer.MyTokenizer(text_out, MAX_VOCAB_SIZE_OUT, MAX_SEQUENCE_LENGTH_OUT, CHAR_TOKENIZER)

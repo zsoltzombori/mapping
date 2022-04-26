@@ -30,19 +30,44 @@ from monitor import MonitorProbs
 
 ##########################################
 
-def load_data(datadir, buffer_size, split=(0.7, 0.15, 0.15)):
-    element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
-    result = {}
+def load_data_raw(datadir):
+    parts = datadir.split("___")
+    if len(parts) == 1:
+        datadirs = [datadir]
+    elif len(parts) == 2:
+        prefix = parts[0]
+        suffixes = (parts[1][1:]).split(',')
+        datadirs = [prefix + "/" + s for s in suffixes]
+    else:
+        assert False, "load_data_raw error"
 
+    examples = {"pos":None, "neg":None}
+    element_spec = {'input': tf.TensorSpec(shape=(), dtype=tf.string, name=None), 'output': tf.RaggedTensorSpec(tf.TensorShape([None]), tf.string, 0, tf.int32)}
+    
+    for datadir in datadirs:
+        for example_type in ("pos", "neg"):
+            datadir_curr = datadir + "/" + example_type
+            if not os.path.isdir(datadir_curr):
+                continue
+            curr_examples = tf.data.experimental.load(datadir_curr, element_spec=element_spec)
+            if examples[example_type] is None:
+                examples[example_type] = curr_examples
+            else:
+                examples[example_type] = examples[example_type].concatenate(curr_examples)
+            size = tf.data.experimental.cardinality(examples[example_type]).numpy()
+    return examples
+
+def load_data(datadir, buffer_size, split):
+    examples_dict = load_data_raw(datadir)
+
+    result = {}
     max_input_len_c = 0
     max_output_len_c = 0
     max_input_len_w = 0
     max_output_len_w = 0
     for example_type in ("pos", "neg"):
-        datadir_curr = datadir + "/" + example_type
-        if not os.path.isdir(datadir_curr):
-            continue
-        examples = tf.data.experimental.load(datadir_curr, element_spec=element_spec)
+        examples = examples_dict[example_type]
+
         examples = examples.shuffle(buffer_size, reshuffle_each_iteration=False)
         size = tf.data.experimental.cardinality(examples).numpy()
 
@@ -445,10 +470,22 @@ class Transformer(tf.keras.Model):
   def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size,
                target_vocab_size, pe_input, pe_target, rate=0.1):
     super().__init__()
-    self.encoder = Encoder(num_layers, d_model, num_heads, dff,
+
+    num_layers_parts = num_layers.split(",")
+    if len(num_layers_parts) == 1:
+        num_layers_enc = int(num_layers_parts[0])
+        num_layers_dec = int(num_layers_parts[0])
+    elif len(num_layers_parts) == 2:
+        num_layers_enc = int(num_layers_parts[0])
+        num_layers_dec = int(num_layers_parts[1])
+    else:
+        assert False
+    
+
+    self.encoder = Encoder(num_layers_enc, d_model, num_heads, dff,
                              input_vocab_size, pe_input, rate)
 
-    self.decoder = Decoder(num_layers, d_model, num_heads, dff,
+    self.decoder = Decoder(num_layers_dec, d_model, num_heads, dff,
                            target_vocab_size, pe_target, rate)
 
     self.final_layer = tf.keras.layers.Dense(target_vocab_size)

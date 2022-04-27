@@ -67,6 +67,9 @@ def load_data(datadir, buffer_size, split):
     max_output_len_w = 0
     for example_type in ("pos", "neg"):
         examples = examples_dict[example_type]
+        if examples is None:
+            continue
+        
 
         examples = examples.shuffle(buffer_size, reshuffle_each_iteration=False)
         size = tf.data.experimental.cardinality(examples).numpy()

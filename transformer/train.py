@@ -21,6 +21,7 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)  # suppress warnings
 import time
 import sys
 import argparse
+import re
 
 import transformer
 
@@ -245,6 +246,7 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
       sentence = transformer.remove_input_arguments(sentence)
     translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
     candidates = [c.numpy().decode("utf-8") for c in e["output"]]
+    candidates = [re.sub(' +', ' ', c) for c in candidates]
     
     pos_prob = 0.0
     neg_prob = 0.0

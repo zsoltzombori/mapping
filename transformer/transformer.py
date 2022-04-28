@@ -9,6 +9,8 @@ CLIP_NORM = 0.01
 LENGTH_PENALTY=0.5
 SUPPORT_SIZE=50
 
+NEG_SUPPORT_THRESHOLD = 200
+
 import collections
 import os
 import pathlib
@@ -54,8 +56,13 @@ def load_data_raw(datadir):
                 examples[example_type] = curr_examples
             else:
                 examples[example_type] = examples[example_type].concatenate(curr_examples)
-            size = tf.data.experimental.cardinality(examples[example_type]).numpy()
     return examples
+
+def count_dataset(dataset):
+    cnt = 0
+    for d in dataset:
+        cnt+=1
+    return cnt
 
 def load_data(datadir, buffer_size, split):
     examples_dict = load_data_raw(datadir)
@@ -69,10 +76,15 @@ def load_data(datadir, buffer_size, split):
         examples = examples_dict[example_type]
         if examples is None:
             continue
-        
+
+        if example_type == "neg":
+            size11 = count_dataset(examples)
+            examples = examples.filter(lambda x: tf.shape(x["output"])[0] <= NEG_SUPPORT_THRESHOLD)
+            size22 = count_dataset(examples)
+            print("SIZE: ", size11, " -> ", size22)
 
         examples = examples.shuffle(buffer_size, reshuffle_each_iteration=False)
-        size = tf.data.experimental.cardinality(examples).numpy()
+        size = count_dataset(examples)
 
         train_size = int(split[0] * size)
         val_size = int(split[1] * size)
@@ -83,9 +95,9 @@ def load_data(datadir, buffer_size, split):
         val_examples = test_examples.skip(test_size)
         test_examples = test_examples.take(test_size)
 
-        trains = tf.data.experimental.cardinality(train_examples).numpy()
-        vals = tf.data.experimental.cardinality(val_examples).numpy()
-        tests = tf.data.experimental.cardinality(test_examples).numpy()
+        trains = count_dataset(train_examples)
+        vals = count_dataset(val_examples)
+        tests = count_dataset(test_examples)
 
         print(example_type, "sizes: ", trains, vals, tests)
 

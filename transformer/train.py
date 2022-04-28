@@ -136,13 +136,13 @@ print("Output vocab size: ", len(tokenizer_out.vocabulary))
 # create batches of training data
 if "pos" in examples:
   pos_examples, pos_examples_val, pos_examples_test = examples["pos"]
-  pos_size = tf.data.experimental.cardinality(pos_examples).numpy()
+  pos_size = transformer.count_dataset(pos_examples)
   BATCH_SIZE = min(BATCH_SIZE, pos_size)
 else:
   assert False, "MISSING POSITIVE SUPERVISION!!!"
 if "neg" in examples:
   neg_examples, neg_examples_val, neg_examples_test = examples["neg"]
-  neg_size = tf.data.experimental.cardinality(neg_examples).numpy()
+  neg_size = transformer.count_dataset(neg_examples)
   BATCH_SIZE = min(BATCH_SIZE, neg_size)
   neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
 else:

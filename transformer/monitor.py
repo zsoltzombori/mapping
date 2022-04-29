@@ -19,8 +19,21 @@ class MonitorProbs():
         self.key2tensor = {}
         self.outkey2tensor = {}
         self.counter = 0
-        
 
+    def update_analytic(self, x, ys, probs, step):
+        key = x
+        if not key in self.key2tensor:
+            self.key2tensor[key] = x
+            self.history[key] = {}
+        for i, prob in enumerate(probs):
+            if i in ys:
+                outkey = i
+                if not outkey in self.outkey2tensor:
+                    self.outkey2tensor[outkey] = outkey
+                if not outkey in self.history[key]:
+                    self.history[key][outkey] = {}
+                self.history[key][outkey][step] =  prob
+        
     def update_mlp(self, inputs, outputs, sequence_probs):
         #inputs: bs * 1
         # outputs: bs * tokens
@@ -75,7 +88,7 @@ class MonitorProbs():
                 self.history[key][outkey][self.counter] =  prob.numpy()
             
 
-    def plot_one(self, plot, key, showsum=False, average=10):
+    def plot_one(self, plot, key, showsum=False, average=1):
         sumprob = {}
         for outkey in self.history[key]:
             prob_hist = self.history[key][outkey]
@@ -100,7 +113,7 @@ class MonitorProbs():
             plot.plot(keys, values, linestyle='dashed')
         plot.legend(loc='right')
 
-    def plot_one_ratio(self, plot, key, average=10):
+    def plot_one_ratio(self, plot, key, average=1):
         outkeys = list(self.history[key].keys())
         for i, outkey1 in enumerate(outkeys):
             prob_hist1 = self.history[key][outkey1]
@@ -129,7 +142,7 @@ class MonitorProbs():
                 steps = steps[average-1:]
                 prob_ratios = moving_average(prob_ratios, average)
                 ax = plt.gca()
-                ax.set_ylim([0, 10])
+                # ax.set_ylim([0, 10])
                 plot.plot(steps, prob_ratios, label=label)
                 plot.legend(loc='right')
         

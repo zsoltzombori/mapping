@@ -6,12 +6,12 @@ import sys
 from monitor import MonitorProbs
 import mlp_data
 
-LR=0.001
+LR=0.0001
 EPOCHS=20
 BATCH_SIZE=40
 LOSS_TYPE="nll" #nll, prp, prp2
 PRETRAIN=1
-MONITOR=False
+MONITOR=True
 NEG_WEIGHT=3.0
 EPS=1e-5
 
@@ -259,6 +259,7 @@ def run(exp):
     if exp==1:
         d = d1
         dp = dp1
+        nd=None
         num_classes=10
         PRETRAIN=1
         LOSS_TYPE="nll"
@@ -266,6 +267,7 @@ def run(exp):
     elif exp==2:
         d = d1
         dp = dp1
+        nd=None
         num_classes=10
         PRETRAIN=1
         LOSS_TYPE="prp"
@@ -273,6 +275,7 @@ def run(exp):
     if exp==3:
         d = d2
         dp = dp2
+        nd=None
         num_classes=10
         PRETRAIN=100
         LOSS_TYPE="nll"
@@ -280,6 +283,7 @@ def run(exp):
     elif exp==4:
         d = d2
         dp = dp2
+        nd=None
         num_classes=10
         PRETRAIN=100
         LOSS_TYPE="prp"
@@ -335,9 +339,9 @@ def run(exp):
 
 #run(1)
 #run(2)
-#run(3)
-#run(4)
+run(3)
+run(4)
 #run(5)
 #run(6)
-run(7)
+#run(7)
 #run(8)

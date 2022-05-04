@@ -13,8 +13,9 @@ def nearest_step(d, step):
 
 class MonitorProbs():
 
-    def __init__(self, enabled=True):
+    def __init__(self, enabled=True, complement=False):
         self.enabled=enabled
+        self.complement=complement
         self.history = {}
         self.key2tensor = {}
         self.outkey2tensor = {}
@@ -26,7 +27,7 @@ class MonitorProbs():
             self.key2tensor[key] = x
             self.history[key] = {}
         for i, prob in enumerate(probs):
-            if i in ys:
+            if (not self.complement and i in ys) or (self.complement and i not in ys):
                 outkey = i
                 if not outkey in self.outkey2tensor:
                     self.outkey2tensor[outkey] = outkey
@@ -88,7 +89,7 @@ class MonitorProbs():
                 self.history[key][outkey][self.counter] =  prob.numpy()
             
 
-    def plot_one(self, plot, key, showsum=False, average=1):
+    def plot_one(self, plot, key, showsum=True, average=1):
         sumprob = {}
         for outkey in self.history[key]:
             prob_hist = self.history[key][outkey]

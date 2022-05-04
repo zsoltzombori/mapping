@@ -45,15 +45,18 @@ def generator(data):
         yield pos_item, neg_item
 
 def update_monitor(monitor, data, W, W_emb, step):
+    if not monitor.enabled:
+        return
     for x,y in data:
         x_emb = W_emb[x]
         probs = forward_pass(x_emb, W)
         monitor.update_analytic(x, y, probs, step)
 
             
-def train(data, steps, W, W_emb, alpha):
+def train(data, steps, W, W_emb, alpha, monitor_enabled=True):
     datagen = generator(data)
-    monitor = MonitorProbs(enabled=True)
+    monitor = MonitorProbs(enabled=monitor_enabled)
+    monitor_comp = MonitorProbs(enabled=monitor_enabled, complement=True)
 
     total_loss = 0
     total_loss_pos = 0
@@ -81,11 +84,13 @@ def train(data, steps, W, W_emb, alpha):
 
         if (s+1) % 1 == 0:
             update_monitor(monitor, data["pos"], W, W_emb, s+1)
+            update_monitor(monitor_comp, data["pos"], W, W_emb, s+1)
 
 
         if (s+1) % 1000 == 0:
             print("Step {}, avg loss: {}, {}, {}".format(s, total_loss / s, total_loss_pos/s, total_loss_neg/s))
     monitor.plot("probchange_analytic.png", k=1, ratios=True)
+    monitor_comp.plot("probchange_analytic_comp.png", k=1, ratios=True)
 
 def evaluate(data, W, W_emb, vocab_in, vocab_out):
     pos = data["pos"]
@@ -109,22 +114,23 @@ def evaluate(data, W, W_emb, vocab_in, vocab_out):
         success_cnt += int(success)
     print("Total success: {} ({}/{})".format(success_cnt/len(data), success_cnt, len(data)))
     
-datadir="outdata/cmt_renamed/cmt_renamed"
+# datadir="outdata/cmt_renamed/cmt_renamed"
+datadir="outdata/npd/npd"
 data, vocab_in, vocab_out = mlp_data.load_data(datadir)
 num_classes = len(vocab_out)
 num_inputs = len(vocab_in)
 embedding_size = 10
 
-d1 = [
-    (1, [7,8,9]),
-]
-data = {"pos":d1, "neg":None}
-num_classes=10
-num_inputs=2
+# d1 = [
+#     (1, [7,8,9]),
+# ]
+# data = {"pos":d1, "neg":None}
+# num_classes=10
+# num_inputs=2
 
 W_emb = np.random.normal(size=(num_inputs, embedding_size))
 W = np.random.normal(size=(num_classes, embedding_size))
 
 
-train(data, 2000, W, W_emb, 0.01)
+train(data, 20000, W, W_emb, 0.1, monitor_enabled=False)
 # evaluate(data, W, W_emb, vocab_in, vocab_out)

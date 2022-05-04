@@ -1,11 +1,12 @@
-# parent: exp106
-# 
+# parent: exp108
+# basedir: outdata -> Agent_outdata
+# batch_size: 10 -> 40
 
-exp=108
+exp=111
 schema="npd_Agent"
-basedir="outdata/npd"
+basedir="Agent_outdata/npd"
 epochs=200
-batch_size=10
+batch_size=40
 neg_weight=0.0
 num_layers=1,3
 d_model=32

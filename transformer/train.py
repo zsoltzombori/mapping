@@ -199,7 +199,8 @@ transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, N
                   filter_pn=FILTER_PN,
                   ckpt_manager=ckpt_manager)
 
-my_transformer.summary()
+if EPOCHS > 0:
+    my_transformer.summary()
 
 # create a translator
 my_translator = transformer.Translator(tokenizer_in, tokenizer_out, my_transformer)

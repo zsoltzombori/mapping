@@ -140,14 +140,15 @@ if "pos" in examples:
   BATCH_SIZE = min(BATCH_SIZE, pos_size)
 else:
   assert False, "MISSING POSITIVE SUPERVISION!!!"
-if "neg" in examples:
-  neg_examples, neg_examples_val, neg_examples_test = examples["neg"]
-  neg_size = transformer.count_dataset(neg_examples)
-  BATCH_SIZE = min(BATCH_SIZE, neg_size)
-  neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
+
+if ("neg" not in examples) or (NEG_WEIGHT == 0):
+    neg_batches = None
+    neg_examples = None
 else:
-  neg_batches = None
-  neg_examples = None
+    neg_examples, neg_examples_val, neg_examples_test = examples["neg"]
+    neg_size = transformer.count_dataset(neg_examples)
+    BATCH_SIZE = min(BATCH_SIZE, neg_size)
+    neg_batches = transformer.make_batches(neg_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)
 
   
 pos_batches = transformer.make_batches(pos_examples, tokenizer_in, tokenizer_out, BUFFER_SIZE, BATCH_SIZE, REMOVE_ARGS)

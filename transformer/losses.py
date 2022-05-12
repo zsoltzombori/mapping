@@ -70,6 +70,7 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive):
         logprobs2 = tf.maximum(logEPS, logprobs)
         log_d = tf.reduce_sum(mask_nonzero * logprobs2, axis=-1, keepdims=True) / k
         loss = log_d + log_n
+        loss = tf.maximum(loss, -10000)
         # loss *= sumprob
 
     loss = k * loss

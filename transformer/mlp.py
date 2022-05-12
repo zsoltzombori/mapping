@@ -6,8 +6,8 @@ import sys
 from monitor import MonitorProbs
 import mlp_data
 
-LR=0.0001
-EPOCHS=20
+LR=0.1
+EPOCHS=200
 BATCH_SIZE=40
 LOSS_TYPE="nll" #nll, prp, prp2
 PRETRAIN=1
@@ -146,7 +146,8 @@ def build_model(num_classes):
     model.summary()
 
     # optimizer = tf.keras.optimizers.Adamax(LR, beta_1=0.3, beta_2=0.9, epsilon=1e-7)
-    optimizer = tf.keras.optimizers.Adam(LR)
+    # optimizer = tf.keras.optimizers.Adam(LR)
+    optimizer = tf.keras.optimizers.SGD(LR)
 
     return model, optimizer
 
@@ -277,7 +278,7 @@ def run(exp):
         dp = dp2
         nd=None
         num_classes=10
-        PRETRAIN=100
+        PRETRAIN=20
         LOSS_TYPE="nll"
         
     elif exp==4:
@@ -285,7 +286,7 @@ def run(exp):
         dp = dp2
         nd=None
         num_classes=10
-        PRETRAIN=100
+        PRETRAIN=10
         LOSS_TYPE="prp"
 
     elif exp==5:

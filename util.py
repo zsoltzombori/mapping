@@ -221,7 +221,63 @@ def db2preds(cursor, schema, allowed_types=None):
                 binaries[(dtype1, dtype2)].append((r1, r2))
     return {"unary": unaries, "binary": binaries, "table": tables}
 
-def create_supervision(cursor, predicate, query, constants, rules, pos_size):
+def eval_query(cursor, query):
+    try:
+        cursor.execute(query)
+    except:
+        print("Erroneous query, skipping it: ", query)
+        return []
+    
+    result = cursor.fetchall()
+    result = list(set(result))
+
+    # remove null values
+    result = list(filter((lambda r: None not in r), result))
+
+    return result
+
+def add_negative_facts(fact_dict, samplesize):
+    constants = []
+    for p in fact_dict:
+        tuples = fact_dict[p]
+        for t in tuples:
+            constants += list(t)
+    constants = list(set(constants))
+    print("Constants: ", len(constants))
+
+    result = {}
+    for p in fact_dict:
+        tuples = fact_dict[p]
+        random.shuffle(tuples)
+        pos_tuples = tuples[:samplesize]
+        pos_size = len(pos_tuples)
+
+        arity = len(tuples[0])
+        neg_tuples = []
+        attempts = 10000
+        while (len(neg_tuples) < pos_size) and (attempts > 0):
+            attempts -= 1
+            nt = random.choices(constants, k=arity)
+            nt = tuple(nt)
+            if (nt not in tuples) and (nt not in neg_tuples):
+                neg_tuples.append(nt)
+        result[p] = {"pos":pos_tuples, "neg":neg_tuples}
+    return result
+
+def get_support(predicate, tuples, rules):
+    targets = {}
+    for t in tuples:
+        targets_for_t = []
+        atom = [predicate] + list(t)
+        for r in rules:
+            mappings_curr, targets_curr = r.get_support(atom)
+            targets_for_t += targets_curr
+        if len(targets_for_t) > 0:
+            targets[tuple(atom)] = targets_for_t
+    return targets
+
+        
+def create_supervision(cursor, predicate, query, constants, rules, pos_size, neg_support_limit=100):
 
     # first collect positive facts and all their proofs
     try:
@@ -293,6 +349,8 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size):
             neg_targets[atom] = []
             for r in rules:
                 neg_mappings_curr, neg_targets_curr = r.get_support([predicate] + list(nt))
+                neg_mappings_curr = neg_mappings_curr[:neg_support_limit]
+                neg_targets_curr = neg_targets_curr[:neg_support_limit]
                 neg_targets[atom] += neg_targets_curr
                 neg_mappings += neg_mappings_curr
 

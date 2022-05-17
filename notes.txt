@@ -3,10 +3,17 @@ This formula has created a default database cluster with:
 For more details, read:
   https://www.postgresql.org/docs/13/app-initdb.html
 
+postgres without root:
+https://www.endpointdev.com/blog/2013/06/installing-postgresql-without-root/
+
 To start postgresql:
   brew services start postgresql
 Or, if you don't want/need a background service you can just run:
-  /opt/homebrew/opt/postgresql/bin/postgres -D /opt/homebrew/var/postgres
+  /opt/homebrew/opt/postgresql/bin/postgres -D
+  /opt/homebrew/var/postgres
+
+Start postgres db from my desktop:
+~/postgres/bin/pg_ctl -D ~/postgres/data/ -l logfile start
 
 First log into the interactive terminal
 psql postgres

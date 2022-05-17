@@ -17,22 +17,25 @@ class StringFromCols:
         self.n = number
 
     def find_split(self, text, columns, row):
+        
+        # find all matches
         matches = []
         for v, column in zip(row, columns):
             if v is None:
                 continue
-            index = text.find(v)
-
-            if index >= 0:
-                # we assume that a match is delimited by '/' characters TODO reconsider
-                if index > 0 and text[index-1] != '/':
-                    continue
-                elif (index + len(v) < len(text)) and text[index+len(v)] != '/':
-                    continue
-                else:
+            # we assume '/' delimiting
+            index = text.find('/' + v + '/') # first check middle match
+            if index > 0:
+                matches.append((index+1, len(v), column, v))
+            else:
+                index = text.find(v + '/')
+                if index == 0:
                     matches.append((index, len(v), column, v))
+                else:
+                    index = text.find('/' + v)
+                    if index > 0 and (index + len(v) + 1 == len(text)):
+                        matches.append((index+1, len(v), column, v))            
         matches.sort()
-
         result_cols = []
         result_vals = []
         match_count = 0
@@ -42,42 +45,38 @@ class StringFromCols:
                 continue
 
             padding = text[curr_index:m[0]]
-
-            # there should always be some padding
-            # if len(padding) == 0:
-            #     return False, None
-
-            # padding should not contain "/{number}/" pattern
-            if re.search("/[0-9]+/", padding):
-                return False, None
-            if re.search("/[0-9]+-[0-9]+-[0-9]+/", padding):
-                return False, None
-                
-            result_cols.append(padding)
-            result_vals.append(padding)
+            if len(padding) > 0:
+                # padding should not contain "/{number}/" pattern
+                if re.search("/[0-9]+/", padding):
+                    return False, None
+                if re.search("/[0-9]+-[0-9]+-[0-9]+/", padding):
+                    return False, None
+                result_cols.append(padding)
+                result_vals.append(padding)
                 
             result_cols.append(m[2])
-            result_vals.append(m[3])
-            
+            result_vals.append(m[3])            
             match_count += 1
             curr_index = m[0] + m[1]
 
-        if curr_index < len(text)-1: # paddding at the end
+        if curr_index < len(text)-1: # padding at the end
             padding = text[curr_index:]
             if re.search("/[0-9]+", padding):
                 return False, None
             if re.search("/[0-9]+-[0-9]+-[0-9]+/", padding):
                 return False, None
-            
             result_cols.append(padding)
-            result_vals.append(padding)            
+            result_vals.append(padding)
+
+        if match_count < 1:
+            return False, None
         
         return True, (match_count, tuple(result_cols), tuple(result_vals))
         
             
     def align_unary(self, text, cursor, tables):
         matches = []
-        for table in tables:
+        for table in tables: 
             columns = tables[table]
             columns = [c[0] for c in columns]
             colstrings = ["CAST({} as CHARACTER VARYING)".format(c) for c in columns]
@@ -86,23 +85,25 @@ class StringFromCols:
             result = cursor.fetchall()
             duplicate_checker = {}
             matches_for_table = []
+            succ_cnt = 0
             best_count = 0
             for r in result:
                 success, match = self.find_split(text, columns, r)
+                succ_cnt += success
                 if success and match not in duplicate_checker:
                     duplicate_checker[match] = True
                     match_count, matched_cols, matched_vals = match
-                    best_count = max(match_count, best_count)
-                    if match_count == best_count and match_count >=1: # TODO match_count threshold
+                    best_count = max(best_count ,match_count)
+                    if match_count >=1:
                         matches_for_table.append((match_count, table, matched_cols, matched_vals))
 
             matches_for_table.sort(reverse=True)
+            
             for cnt, table, cols, vals in matches_for_table:
-                if cnt < best_count:
-                    break
-                cols = list(cols)
-                cols.insert(0, table)
-                matches.append((self.n, cols, vals))
+                if cnt >= best_count - 1:
+                    cols = list(cols)
+                    cols.insert(0, table)
+                    matches.append((self.n, cols, vals))
         return matches
 
     def align_binary(self, text1, text2, cursor, tables):
@@ -125,18 +126,17 @@ class StringFromCols:
                     match_count1, matched_cols1, matched_vals1 = match1
                     match_count2, matched_cols2, matched_vals2 = match2
                     best_count = max(match_count1+match_count2, best_count)
-                    if (match_count1+match_count2) == best_count and match_count1 >=1 and match_count2 >=1: # TODO match_count threshold
+                    if match_count1 >=1 and match_count2 >=1: # TODO match_count threshold
                         matches_for_table.append((match_count1+match_count2, table, matched_cols1, matched_vals1, matched_cols2, matched_vals2))
 
             matches_for_table.sort(reverse=True)
             for cnt, table, cols1, vals1, cols2, vals2 in matches_for_table:
-                if cnt < best_count:
-                    break
-                cols1 = list(cols1)
-                cols1.insert(0, table)
-                cols2 = list(cols2)
-                cols2.insert(0, table)
-                matches.append((self.n, cols1+cols2, vals1+vals2))
+                if cnt >= best_count -1:
+                    cols1 = list(cols1)
+                    cols1.insert(0, table)
+                    cols2 = list(cols2)
+                    cols2.insert(0, table)
+                    matches.append((self.n, cols1+cols2, vals1+vals2))
         return matches
     
 
@@ -239,7 +239,6 @@ class Rule:
         return matches
 
     def candidate_mappings(self, body, subst, mapping, target):
-
         if len(body) == 0:
             return [mapping], [target + ["EOS"]]
         

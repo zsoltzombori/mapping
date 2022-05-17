@@ -44,22 +44,23 @@ class MappingProblem:
 
     def get_rules(self, p):
         rules = []
-        rules.append(Rule([[p, Variable(1)], [p+"_upred_1a", Variable(1)]], self.cursor, self.preds))
-        rules.append(Rule([[p, Variable(1)], [p+"_upred_2a", Variable(1), Constant(p+"_uconst_2a")]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1)], [p+"_upred_1a", Variable(1)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1)], [p+"_upred_2a", Variable(1), Constant(p+"_uconst_2a")]], self.cursor, self.preds))
         rules.append(Rule([[p, Variable(1)], [StringFromCols(p+"_upred_3a"), Variable(1)]], self.cursor, self.preds))
 
-        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_1a", Variable(1), Variable(2)]], self.cursor, self.preds))
-        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_2a", Variable(1), Variable(2)], [p+"_bpred_2b", Variable(1)]], self.cursor, self.preds))
-        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_3a", Variable(1), Variable(2)], [p+"_bpred_3b", Variable(2)]], self.cursor, self.preds))
-        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_4a", Variable(1), Variable(2)], [p+"_bpred_4b", Variable(1)], [p+"_bpred_4c", Variable(2)]], self.cursor, self.preds))
-        rules.append(Rule([[p, Variable(1), Variable(2)], [StringFromCols(p+"_sbpred_5a"), Variable(1), Variable(2)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_1a", Variable(1), Variable(2)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_2a", Variable(1), Variable(2)], [p+"_bpred_2b", Variable(1)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_3a", Variable(1), Variable(2)], [p+"_bpred_3b", Variable(2)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_4a", Variable(1), Variable(2)], [p+"_bpred_4b", Variable(1)], [p+"_bpred_4c", Variable(2)]], self.cursor, self.preds))
+        # rules.append(Rule([[p, Variable(1), Variable(2)], [StringFromCols(p+"_sbpred_5a"), Variable(1), Variable(2)]], self.cursor, self.preds))
+        
         # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
         return rules
-        
-    def generate_data(self, samplesize, path):
 
+    def get_preds_and_queries(self, filterlist):
+        
         if self.true_mapping is None:
-            preds_and_queries = []            
+            preds_and_queries = []
             for query in self.queries:
                 success, pred, sql = query.create_supervision()
                 if success:
@@ -68,7 +69,51 @@ class MappingProblem:
                     print("Skipping query (non-atomic): ", query.filename)
         else:
             preds_and_queries = self.true_mapping.items()
+
+        if filterlist is not None:
+            preds_and_queries = list(filter((lambda x: x[0] in filterlist), preds_and_queries))
         
+        return preds_and_queries
+        
+
+    def generate_data_for_preds(self, samplesize, path, filterlist=["Agent","Well"]):
+        preds_and_queries = self.get_preds_and_queries(filterlist)
+        
+        # get all facts for all queries
+        fact_dict = {}
+        for p, q in preds_and_queries:
+            fact_dict[p] = util.eval_query(self.cursor, q)
+
+        # finalise positive and negative facts
+        fact_dict = util.add_negative_facts(fact_dict, samplesize)
+
+        # get support for each fact
+        for p in fact_dict:
+            rules = self.get_rules(p)
+            pos_tuples = fact_dict[p]["pos"]
+            neg_tuples = fact_dict[p]["neg"]
+            fact_dict[p]["pos_support"] = util.get_support(p, pos_tuples, rules)
+            fact_dict[p]["neg_support"] = util.get_support(p, neg_tuples, rules)
+            print("{} pos: {}, neg: {}".format(p, len(fact_dict[p]["pos_support"]), len(fact_dict[p]["neg_support"])))
+
+        # save to file
+        elements = {
+            True: {"input": [], "output": []},
+            False: {"input": [], "output": []},
+        }
+        for p in fact_dict:
+            pos_targets = fact_dict[p]["pos_support"]
+            neg_targets = fact_dict[p]["neg_support"]
+            for target_dict, ispositive in zip((pos_targets, neg_targets), (True, False)):
+                d_inputs, d_outputs = self.target2strings(target_dict)
+                elements[ispositive]["input"] += d_inputs
+                elements[ispositive]["output"] += d_outputs
+
+        self.elements2file(elements, path)
+            
+    def generate_data(self, samplesize, path, filterlist=None):
+        preds_and_queries = self.get_preds_and_queries(filterlist)
+
         elements = {
             True: {"input": [], "output": []},
             False: {"input": [], "output": []},
@@ -89,13 +134,18 @@ class MappingProblem:
             rules = self.get_rules(predicate)
             pos_mappings, pos_targets, neg_mappings, neg_targets = util.create_supervision(self.cursor, predicate, query, self.constants, rules, samplesize)
 
-            print("Mapping statistics for predicate ", predicate)
+            if len(pos_targets) < 0:
+                print("Not enough positive supervision, skipping predicate", predicate)
+                continue
+
+            # print("Mapping statistics for predicate ", predicate)
             # util.visualise_mapping_dict({True:pos_mappings, False:neg_mappings})
 
             # d_input = ["SOS"] + [str(predicate)] + ["EOP","EOS"]
             # d_input = " ".join(d_input)
             
             for targets, ispositive in zip((pos_targets, neg_targets), (True, False)):
+                
                 for head in targets:
                     d_input = "SOS " + head[0] + " PREDEND"
                     for arg in head[1:]:
@@ -129,15 +179,34 @@ class MappingProblem:
 
         self.elements2file(elements, path)
 
+    def target2strings(self, target_dict):
+        d_inputs = []
+        d_outputs = []
+        for head in target_dict:
+            d_input = "SOS " + head[0] + " PREDEND"
+            for arg in head[1:]:
+                if isinstance(arg, str):
+                    arg = arg.split()
+                    arg = "_".join(arg)
+                d_input = "{} {}".format(d_input, arg)
+            d_input += " EOP EOS"
+            target_list = target_dict[head]
+            target_list = [[str(x) for x in t] for t in target_list]
+            d_output = [" ".join(t) for t in target_list]
+            d_inputs.append(d_input)
+            d_outputs.append(d_output)
+        return d_inputs, d_outputs
+
     def elements2file(self, elements, path):        
         path_pos = "{}/pos".format(path)
         path_neg = "{}/neg".format(path)
 
         for ispositive, p in zip((True, False), (path_pos, path_neg)):
+            el = elements[ispositive]["output"]
             if len(elements[ispositive]["output"]) > 0:
                 elements[ispositive]["output"] = tf.ragged.stack(elements[ispositive]["output"])
                 dataset = tf.data.Dataset.from_tensor_slices(elements[ispositive])
-                print("Element spec for {} {}:{}".format(p, ispositive, dataset.element_spec))
+                # print("Element spec for {} {}:{}".format(p, ispositive, dataset.element_spec))
                 tf.data.experimental.save(dataset, p)
             else:
                 print("Empty elements for {} {}".format(p, ispositive))        

@@ -11,31 +11,55 @@ from rule import Rule, Variable, Constant
 import train
 import data
 
-POS_SIZE=100
+POS_SIZE=1000
 
 schemas = (
-    ("cmt_renamed", supervision.cmt_renamed_mapping),
-    ("cmt_structured", supervision.cmt_structured_mapping),
-    ("cmt_structured_ci", supervision.cmt_structured_ci_mapping),
-    ("cmt_naive", supervision.cmt_naive_mapping),
-    ("cmt_naive_ci", supervision.cmt_naive_ci_mapping),
-    ("cmt_denormalized", supervision.cmt_denormalized_mapping),
-    ("cmt_mixed", supervision.cmt_mixed_mapping),
+    # ("cmt_renamed", supervision.cmt_renamed_mapping),
+    # ("cmt_structured", supervision.cmt_structured_mapping),
+    # ("cmt_structured_ci", supervision.cmt_structured_ci_mapping),
+    # ("cmt_naive", supervision.cmt_naive_mapping),
+    # ("cmt_naive_ci", supervision.cmt_naive_ci_mapping),
+    # ("cmt_denormalized", supervision.cmt_denormalized_mapping),
+    # ("cmt_mixed", supervision.cmt_mixed_mapping),
     ("npd", None), 
     # ("cmt2sigkdd", None),
     # ("cmt2conference", None),
 )
 
+npd_filterlist=[
+    "Agent",
+    "AppraisalWellbore",
+    "Area",
+    "AwardArea",
+    "BAA",
+    "BAAArea",
+    "BAATransfer",
+    "Block",
+    "ChangeOfCompanyNameTransfer",
+    "Company",
+    "CompanyReserve",
+    "ConcreteStructureFacility",
+    "Condeep3ShaftsFacility",
+    "Condeep4ShaftsFacility",
+    "CondensatePipeline",
+    "DSTForWellbore",
+    "DevelopmentWellbore",
+    "Discovery",
+    "DiscoveryArea",
+    "DiscoveryReserve",
+]
+
 for schema, true_mapping in schemas:
     print("SCHEMA: ", schema)
     ontology = "RODI/data/{}/ontology.ttl".format(schema)
     query_dir = "RODI/data/{}/queries".format(schema)
-    datapath = "outdata/{}/{}".format(schema, schema)
+    datapath = "npddata1000/{}/{}".format(schema, schema)
     problem = mappingProblem.MappingProblem(schema, ontology, true_mapping)
     problem.add_query_dir(query_dir)
 
     t0 = time.time()
-    problem.generate_data(samplesize=POS_SIZE, path=datapath)
+    problem.generate_data_for_preds(samplesize=POS_SIZE, path=datapath, filterlist=npd_filterlist)
+    # problem.generate_data(samplesize=POS_SIZE, path=datapath)
     t1 = time.time()
     print("Data generation for schema {} took {:.3f} sec".format(schema, t1 - t0))
 

@@ -55,7 +55,7 @@ class Query:
         pred = re.sub(":", "", pred)
         
         sql_query = self.sql_query.replace("COUNT(*)", "x")
-        print("query: ", sql_query)
+        # print("query: ", sql_query)
         return True, pred, sql_query
 
 

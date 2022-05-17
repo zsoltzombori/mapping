@@ -15,13 +15,6 @@ NEG_WEIGHT=3.0
 EPS=1e-5
 logEPS=tf.math.log(EPS)
 
-d2 = [
-    (1, (7,8)),
-    (1, (7,9)),
-]
-dp2 = [
-    (1, (8,9)),
-]
 
 d3 = [
     (1, (0,1,2)),
@@ -233,7 +226,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, suffix, ndata=N
         print(f'{T} sec, Loss: {train_loss.result():.4f}   {train_loss_pos.result():.4f}/{train_loss_neg.result():.4f} Probs {train_probs_pos.result():.3f}/{train_probs_neg.result():.3f}')
         sys.stdout.flush()
         
-    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=True, showsum=False)
+    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=False, showsum=False)
 
 def evaluate(model, data, ndata=None):
 
@@ -286,20 +279,30 @@ def run(exp):
         network_sizes=(10,10)
 
     if exp==3:
-        d = d2
-        dp = dp2
+        d = [(0, (0,1)), (0, (0,2))]
+        dp = [(0, (1,2))]
         nd=None
         num_classes=10
-        PRETRAIN=20
         LOSS_TYPE="nll"
+        EPOCHS = 100
+        PRETRAIN=20
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
         
     elif exp==4:
-        d = d2
-        dp = dp2
+        d = [(0, (0,1)), (0, (0,2))]
+        dp = [(0, (1,2))]
         nd=None
         num_classes=10
-        PRETRAIN=10
         LOSS_TYPE="prp"
+        EPOCHS=100
+        PRETRAIN=20
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
 
     elif exp==5:
         d=d3
@@ -350,10 +353,10 @@ def run(exp):
         ndata = None
     train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, "{}_{}".format(exp, LOSS_TYPE), ndata=ndata)
 
-run(1)
-run(2)
-#run(3)
-#run(4)
+# run(1)
+# run(2)
+run(3)
+# run(4)
 #run(5)
 #run(6)
 #run(7)

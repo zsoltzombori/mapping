@@ -191,8 +191,9 @@ def prp_lnn_vanilla_plot():
     plt.plot(logits, loss_nll, label="nll-loss")
     plt.plot(logits, loss_reg, label="regularizer term")
     plt.plot(logits, loss, label="prp-loss")
-    plt.xlabel("Logit of target output")
-    plt.legend(loc='best')
+    plt.xlabel("Logit of target output", fontsize=25)
+    plt.legend(loc='best', prop={'size': 15})
+    plt.tight_layout()
     plt.savefig("prp_vanilla.png")
 
 # prp_lnn_vanilla_plot()

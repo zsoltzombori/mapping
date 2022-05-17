@@ -112,15 +112,16 @@ class MonitorProbs():
             keys = keys[average-1:]
             values = moving_average(values, average)
             plot.plot(keys, values, linestyle='dashed')
-        plot.legend(loc='right')
 
-    def plot_one_ratio(self, plot, key, average=1):
+
+        
+    def get_ratio_curves(self, key, average=1):
+        curves = []
         outkeys = list(self.history[key].keys())
         for i, outkey1 in enumerate(outkeys):
             prob_hist1 = self.history[key][outkey1]
             for j in range(i+1, len(outkeys)):
                 outkey2 = outkeys[j]
-                print("keys: ", self.outkey2tensor[outkey1], self.outkey2tensor[outkey2])
 
                 if outkey1 < outkey2:
                     exp = 1
@@ -143,53 +144,37 @@ class MonitorProbs():
                 steps = steps[average-1:]
                 prob_ratios = moving_average(prob_ratios, average)
                 ax = plt.gca()
-                # ax.set_ylim([0, 10])
-                plot.plot(steps, prob_ratios, label=label)
-                plot.legend(loc='right')
-        
-    def plot(self, filename, k=1, ratios=False):
+                curves.append((steps, prob_ratios, label))
+        return curves    
+                
+    def plot(self, filename, k=1, ratios=False, fontsize=25, showsum=False):
         if not self.enabled:
             return
 
         keys = list(self.history.keys())
         k = min(k, len(keys))
+
+        fig, axs = plt.subplots(k)
+        if k == 1:
+            axs = [axs]
         
-        if k == 1 and ratios==False:
-            plt.xlabel("Update steps")
-            plt.ylabel("Probability")
-            self.plot_one(plt, keys[0])
-        elif k == 1 and ratios == True:
-            fig, axs = plt.subplots(1,2)
-            ax1 = axs[0]
-            ax1.set_xlabel("Update steps")
-            ax1.set_ylabel("Probability")
-            self.plot_one(ax1, keys[0])      
-            ax2 = axs[1]
-            ax2.set_xlabel("Update steps")
-            ax2.set_ylabel("Probability ratio")
-            ax2.yaxis.set_label_position("right")
-            ax2.yaxis.tick_right()
-            self.plot_one_ratio(ax2, keys[0])
-        elif ratios == False:
-            fig, axs = plt.subplots(k)
-            for i in range(k):
-                ax = axs[0]
-                ax.set_xlabel("Update steps")
-                ax.set_ylabel("Probability")
-                self.plot_one(ax, keys[i])                     
-        else:
-            fig, axs = plt.subplots(k,2)        
-            for i in range(k):
-                ax1 = axs[i,0]
-                ax2 = axs[i,1]
-                ax1.set_xlabel("Update steps")
-                ax1.set_ylabel("Probability")
-                self.plot_one(ax1, keys[i])
-                ax2.set_xlabel("Update steps")
-                ax2.set_ylabel("Probability ratio")
-                ax2.yaxis.set_label_position("right")
-                ax2.yaxis.tick_right()
-                self.plot_one_ratio(ax2, keys[i])
+        for i in range(k):
+            ax1 = axs[i]
+            key = keys[i]
+            ax1.set_xlabel("Update step", fontsize=fontsize)
+            ax1.set_ylabel("Probability", fontsize=fontsize)
+            ax1.set_ylim([0, 1.2])
+            self.plot_one(ax1, key, showsum=showsum)
+            ax1.legend(loc="upper right", prop={'size': 13})
+            if ratios:
+                ax2 = ax1.twinx()
+                ax2.set_ylabel("Probability ratio", fontsize=fontsize)
+                ax2.set_ylim([0, 10])
+                curves = self.get_ratio_curves(keys[0])
+                for (steps, prob_ratios, label) in curves:
+                    ax2.plot(steps, prob_ratios, label=label, linestyle='dotted')
+                ax2.legend(loc="right", prop={'size': 13})
+            fig.tight_layout()
 
         plt.savefig(filename)
         plt.close()

@@ -1,23 +1,19 @@
-# import rdflib
-# import psycopg2
-# import tensorflow as tf
 import time
 import argparse
-
+parser = argparse.ArgumentParser()
+parser.add_argument('--schema', type=str, required=True, help="Database schema: one of the subdirectories of RODI/data")
+parser.add_argument('--pos_size', type=int, default=100, help="Number of positive samples per predicate")
+parser.add_argument('--filterlist', type=str, default=None, help="Comma separated list of predicates names. If missing, all predicates in the queries are considered.")
+parser.add_argument('--sampling', type=str, default="uniform", help="Negative sampling: uniform/realistic")
+parser.add_argument('--outdir', type=str, default="outdata", help="Output directory")
+args = parser.parse_args()
+print("\nArguments:")
+for arg in vars(args):
+  print("   ", arg, getattr(args, arg))
+print("\n")
+  
 import mappingProblem
 import supervision
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--schema', type=str, required=True)
-parser.add_argument('--pos_size', type=int, default=100)
-parser.add_argument('--filterlist', type=str, default=None)
-parser.add_argument('--sampling', type=str, default="uniform")
-parser.add_argument('--outdir', type=str, default="outdata")
-args = parser.parse_args()
-for arg in vars(args):
-  print(arg, getattr(args, arg))
-
-
 
 def generate(schema, true_mapping, pos_size, outdir, filterlist=None, sampling="uniform"):
     print("SCHEMA: ", schema)
@@ -28,12 +24,8 @@ def generate(schema, true_mapping, pos_size, outdir, filterlist=None, sampling="
     problem.add_query_dir(query_dir)
     
     t0 = time.time()
-    if sampling == "uniform":
-        problem.generate_data_neg_uniform(samplesize=pos_size, path=datapath, filterlist=filterlist)
-    elif sampling == "realistic":
-        problem.generate_data_neg_realistic(samplesize=pos_size, path=datapath, filterlist=filterlist)
-    else:
-        assert False, "Unknown sampling: " + sampling
+    problem.generate_data(samplesize=pos_size, path=datapath, filterlist=filterlist, sampling=sampling)
+    #     problem.generate_data_neg_uniform(samplesize=pos_size, path=datapath, filterlist=filterlist)
     t1 = time.time()
     print("Data generation for schema {} took {:.3f} sec".format(schema, t1 - t0))
 

@@ -236,14 +236,21 @@ def eval_query(cursor, query):
 
     return result
 
-def add_negative_facts(fact_dict, samplesize):
-    constants = []
-    for p in fact_dict:
-        tuples = fact_dict[p]
-        for t in tuples:
-            constants += list(t)
-    constants = list(set(constants))
-    print("Constants: ", len(constants))
+def add_negative_facts(fact_dict, samplesize, db_constants=None):
+    if db_constants is None:
+        constants = []
+        for p in fact_dict:
+            tuples = fact_dict[p]
+            for t in tuples:
+                constants += list(t)
+        constants = list(set(constants))
+        print("Constants: ", len(constants))
+    else:
+        sql_types = db_constants.keys()
+        supervision_types = {}
+        for p in fact_dict:
+            supervision_types[p] = [get_matching_types(r, sql_types) for r in fact_dict[p][0]]
+
 
     result = {}
     for p in fact_dict:
@@ -257,7 +264,13 @@ def add_negative_facts(fact_dict, samplesize):
         attempts = 10000
         while (len(neg_tuples) < pos_size) and (attempts > 0):
             attempts -= 1
-            nt = random.choices(constants, k=arity)
+            if db_constants is None:
+                nt = random.choices(constants, k=arity)
+            else:
+                nt = []
+                for types in supervision_types[p]:
+                    t = random.choice(types)
+                    nt.append(random.choice(db_constants[t]))
             nt = tuple(nt)
             if (nt not in tuples) and (nt not in neg_tuples):
                 neg_tuples.append(nt)
@@ -303,15 +316,15 @@ def create_supervision(cursor, predicate, query, constants, rules, pos_size, neg
     pos_mappings = []
     pos_targets = {}
     for pt in pos_tuples: # collect proofs for each fact
-        atom = tuple([predicate] + list(pt))
-        pos_targets[atom] = []
+        atom = [predicate] + list(pt)
+        targets_for_pt = []
         for r in rules:
-            pos_mappings_curr, pos_targets_curr = r.get_support([predicate] + list(pt))
-            pos_targets[atom] += pos_targets_curr
+            pos_mappings_curr, pos_targets_curr = r.get_support(atom)
+            targets_for_pt += pos_targets_curr
             pos_mappings += pos_mappings_curr
 
-        if len(pos_targets[atom]) == 0:
-            del pos_targets[atom]
+        if len(targets_for_pt) > 0:
+            pos_targets[tuple(atom)] = targets_for_pt
 
 
     # create matching number of negative proofs

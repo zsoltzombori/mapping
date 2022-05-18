@@ -30,3 +30,13 @@ psql -U zsoori -d rodi -p 5432 -f ~/mapping/RODI/data/cmt_structured/dump.sql
 
 \du: users of the database
 
+python extract.py --schema cmt_naive --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema cmt_renamed --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema cmt_structured --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema cmt_structured_ci --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema cmt_naive_ci --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema cmt_denormalized --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema cmt_mixed --pos_size 100 --sampling uniform --outdir outdata
+
+python extract.py --schema npd --pos_size 100 --sampling uniform --outdir outdata
+python extract.py --schema npd --pos_size 1000 --sampling uniform --outdir outdata --filterlist Agent,AppraisalWellbore,Area,AwardArea,BAA,BAAArea,BAATransfer,Block,ChangeOfCompanyNameTransfer,Company,CompanyReserve,ConcreteStructureFacility,Condeep3ShaftsFacility,Condeep4ShaftsFacility,CondensatePipeline,DSTForWellbore,DevelopmentWellbore,Discovery,DiscoveryArea,DiscoveryReserve

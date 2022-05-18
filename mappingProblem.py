@@ -44,15 +44,15 @@ class MappingProblem:
 
     def get_rules(self, p):
         rules = []
-        # rules.append(Rule([[p, Variable(1)], [p+"_upred_1a", Variable(1)]], self.cursor, self.preds))
-        # rules.append(Rule([[p, Variable(1)], [p+"_upred_2a", Variable(1), Constant(p+"_uconst_2a")]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1)], [p+"_upred_1a", Variable(1)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1)], [p+"_upred_2a", Variable(1), Constant(p+"_uconst_2a")]], self.cursor, self.preds))
         rules.append(Rule([[p, Variable(1)], [StringFromCols(p+"_upred_3a"), Variable(1)]], self.cursor, self.preds))
 
-        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_1a", Variable(1), Variable(2)]], self.cursor, self.preds))
-        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_2a", Variable(1), Variable(2)], [p+"_bpred_2b", Variable(1)]], self.cursor, self.preds))
-        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_3a", Variable(1), Variable(2)], [p+"_bpred_3b", Variable(2)]], self.cursor, self.preds))
-        # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_4a", Variable(1), Variable(2)], [p+"_bpred_4b", Variable(1)], [p+"_bpred_4c", Variable(2)]], self.cursor, self.preds))
-        # rules.append(Rule([[p, Variable(1), Variable(2)], [StringFromCols(p+"_sbpred_5a"), Variable(1), Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_1a", Variable(1), Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_2a", Variable(1), Variable(2)], [p+"_bpred_2b", Variable(1)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_3a", Variable(1), Variable(2)], [p+"_bpred_3b", Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_bpred_4a", Variable(1), Variable(2)], [p+"_bpred_4b", Variable(1)], [p+"_bpred_4c", Variable(2)]], self.cursor, self.preds))
+        rules.append(Rule([[p, Variable(1), Variable(2)], [StringFromCols(p+"_sbpred_5a"), Variable(1), Variable(2)]], self.cursor, self.preds))
         
         # rules.append(Rule([[p, Variable(1), Variable(2)], [p+"_pred7a", Variable(1), Variable(2)], [p+"_pred7b", Variable(1), Constant(p+"_const7a")]], self.cursor, self.preds))
         return rules
@@ -76,7 +76,7 @@ class MappingProblem:
         return preds_and_queries
         
 
-    def generate_data_neg_realistic(self, samplesize, path, filterlist=None):
+    def generate_data(self, samplesize, path, filterlist=None, sampling="uniform"):
         preds_and_queries = self.get_preds_and_queries(filterlist)
         
         # get all facts for all queries
@@ -85,7 +85,11 @@ class MappingProblem:
             fact_dict[p] = util.eval_query(self.cursor, q)
 
         # finalise positive and negative facts
-        fact_dict = util.add_negative_facts(fact_dict, samplesize)
+        if sampling == "uniform":
+            db_constants = self.constants
+        else:
+            db_constants = None
+        fact_dict = util.add_negative_facts(fact_dict, samplesize, db_constants)
 
         # get support for each fact
         for p in fact_dict:

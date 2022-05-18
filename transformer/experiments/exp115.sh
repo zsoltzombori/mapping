@@ -1,13 +1,15 @@
-# parent: exp105
-# neg_weight: 0.1 -> 0.0
+# parent: exp107
+# num_layers: 1,3 -> 1,2
+# epochs: 200 -> 50
+# no train on negatives
 
-exp=107
+exp=115
 schema="MULTI"
 basedir="outdata/npd"
-epochs=200
+epochs=50
 batch_size=10
 neg_weight=0.0
-num_layers=1,3
+num_layers=1,2
 d_model=32
 lr=0.01
 lr_decay_steps=30

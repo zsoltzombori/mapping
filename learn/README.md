@@ -8,5 +8,24 @@ To run an experiment, it suffices to run the corresponding script, e.g.
 
 `bash experiments/exp128.sh`
 
-The configuration files specify the location of the dataset in the `basedir` parameter. All the datasets used in our final experiments are provided in the [data_compressed/](data_compressed/) folder. Note that the datasets have to unpacked before running an experiment. These datasets were extracted from the CMT and NPD challenges of the RODI benchmark, using the **Extraction** module, describet in [../README.md](../README.md).
+The configuration files specify the location of the dataset in the `basedir` parameter. All the datasets used in our final experiments are provided in the [data_compressed/](data_compressed/) folder. Note that the datasets have to be unpacked before running an experiment. These datasets were extracted from the CMT and NPD challenges of the RODI benchmark, using the **Extraction** module, described in [../README.md](../README.md).
 
+### Experiments from the paper
+
+CMT experiments with the prp-loss:
+`bash experiments/exp91.sh`
+
+CMT experiments with the nll-loss:
+`bash experiments/exp129.sh`
+
+NPD experiment with uniform sampling and prp-loss:
+`bash experiments/exp120.sh`
+
+NPD experiment with uniform sampling and nll-loss:
+`bash experiments/exp121.sh`
+
+NPD experiment with realistic sampling and prp-loss:
+`bash experiments/exp127.sh`
+
+NPD experiment with realistic sampling and nll-loss:
+`bash experiments/exp128.sh`

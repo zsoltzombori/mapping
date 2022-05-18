@@ -76,7 +76,7 @@ class MappingProblem:
         return preds_and_queries
         
 
-    def generate_data_for_preds(self, samplesize, path, filterlist=["Agent","Well"]):
+    def generate_data_neg_realistic(self, samplesize, path, filterlist=None):
         preds_and_queries = self.get_preds_and_queries(filterlist)
         
         # get all facts for all queries
@@ -111,7 +111,7 @@ class MappingProblem:
 
         self.elements2file(elements, path)
             
-    def generate_data(self, samplesize, path, filterlist=None):
+    def generate_data_neg_uniform(self, samplesize, path, filterlist=None):
         preds_and_queries = self.get_preds_and_queries(filterlist)
 
         elements = {
@@ -208,6 +208,7 @@ class MappingProblem:
                 dataset = tf.data.Dataset.from_tensor_slices(elements[ispositive])
                 # print("Element spec for {} {}:{}".format(p, ispositive, dataset.element_spec))
                 tf.data.experimental.save(dataset, p)
+                print("   SAVED TO ", p)
             else:
                 print("Empty elements for {} {}".format(p, ispositive))        
 

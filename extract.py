@@ -49,27 +49,3 @@ if args.filterlist is not None:
     args.filterlist = args.filterlist.split(',')
     
 generate(args.schema, true_mapping, args.pos_size, args.outdir, args.filterlist, args.sampling)
-
-
-npd_filterlist=[
-    "Agent",
-    "AppraisalWellbore",
-    "Area",
-    "AwardArea",
-    "BAA",
-    "BAAArea",
-    "BAATransfer",
-    "Block",
-    "ChangeOfCompanyNameTransfer",
-    "Company",
-    "CompanyReserve",
-    "ConcreteStructureFacility",
-    "Condeep3ShaftsFacility",
-    "Condeep4ShaftsFacility",
-    "CondensatePipeline",
-    "DSTForWellbore",
-    "DevelopmentWellbore",
-    "Discovery",
-    "DiscoveryArea",
-    "DiscoveryReserve",
-]

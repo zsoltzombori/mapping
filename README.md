@@ -1,8 +1,8 @@
 ## Learning Mapping Rules for Ontology to Relational Alignment
 
-This codebase has two parts. There is a **dataset extraction** module, that is responsible for extracting datasets from the [RODI benchmark](https://www.cs.ox.ac.uk/isg/tools/RODI/). The datasets are saved as Tensorflow dataset objects. The second part is the **learning** module, provided in [learn/](learn/), which is descibed in [learn/README.md](learn/README.md). The two parts interact only via the generated datasets. In the following, we describe the **dataset extraction** part.
+This codebase has two parts. There is an **Extraction** module, that is responsible for extracting datasets from the [RODI benchmark](https://www.cs.ox.ac.uk/isg/tools/RODI/). The datasets are saved as Tensorflow dataset objects. The second part is the **Learning** module, provided in [learn/](learn/), which is descibed in [learn/README.md](learn/README.md). The two parts interact only via the generated datasets. In the following, we describe the **dataset extraction** part.
 
-### Dataset Extraction
+### Extraction Module
 
 Extraction requires that you have a running [PostgreSQL](https://www.postgresql.org) database instance and the datasets provided with RODI are loaded into the dataset. See the linked page for instruction about how to set up PostgreSQL. Assuming that you have a running instance under user `user` which listens at localhost port `5432` and contains a database `rodi`, create a file named `database.ini` containing the following lines:
 

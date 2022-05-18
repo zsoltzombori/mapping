@@ -1,4 +1,4 @@
-# Learning Mapping Rules for Ontology to Relational Alignment
+## Learning Mapping Rules for Ontology to Relational Alignment
 
 This codebase has two parts. There is a **dataset extraction** module, that is responsible for extracting datasets from the [RODI benchmark](https://www.cs.ox.ac.uk/isg/tools/RODI/). The datasets are saved as Tensorflow dataset objects. The second part is the **learning** module, provided in [learn/](learn/), which is descibed in [learn/README.md](learn/README.md). The two parts interact only via the generated datasets. In the following, we describe the **dataset extraction** part.
 

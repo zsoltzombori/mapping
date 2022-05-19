@@ -43,10 +43,11 @@ python extract.py --schema cmt_structured_ci --pos_size 100 --sampling uniform -
 python extract.py --schema cmt_naive_ci --pos_size 100 --sampling uniform --outdir outdata
 python extract.py --schema cmt_denormalized --pos_size 100 --sampling uniform --outdir outdata
 python extract.py --schema cmt_mixed --pos_size 100 --sampling uniform --outdir outdata
-
+```
 
 ### Commands used to generate datasets for NPD experiments (Section 5.2):
 
+```
 python extract.py --schema npd --pos_size 100 --sampling uniform --outdir outdata
 python extract.py --schema npd --pos_size 1000 --sampling uniform --outdir npddata1000 --filterlist Agent,AppraisalWellbore,Area,AwardArea,BAA,BAAArea,BAATransfer,Block,ChangeOfCompanyNameTransfer,Company,CompanyReserve,ConcreteStructureFacility,Condeep3ShaftsFacility,Condeep4ShaftsFacility,CondensatePipeline,DSTForWellbore,DevelopmentWellbore,Discovery,DiscoveryArea,DiscoveryReserve
 ```

@@ -22,6 +22,6 @@ The configuration files specify the location of the dataset in the `basedir` par
 - prp-loss, realistic sampling: `bash experiments/exp127.sh`
 - nll-loss, realistic sampling: `bash experiments/exp128.sh`
 
-### Code used to generate Figure 1, 2, 3, 4, 5, 6:
+### Code used to generate Figures 1, 2, 3, 4, 5, 6:
 
 - `python mlp.py`

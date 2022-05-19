@@ -2,7 +2,7 @@
 
 The **Learning** module contains all python code related to experiments. The models are trained using Tensorflow 2 and the [environment.yml](environment.yml) file describes the required python environment.
 
-The main entry point to run an experiment is `train.py` which accepts a large number of command line parameters. For each of our experiments, we create a bash script that lists all the parameters and provides a reference to the "parent experiment" -- the one with which the results should be compared with -- as well as a comment describing the changes to the parent. All of our experiment files can be found in the [experiments/](experiments/) folder.
+The main entry point to run an experiment is `train.py` which accepts a large number of command line parameters. For each of our experiments, we create a bash script that lists all the parameters and provides a reference to the "parent experiment" -- the one with which the results should be compared with -- as well as a comment describing the changes to the parent. All of our experiment files can be found in the `experiments` folder.
 
 To run an experiment, it suffices to run the corresponding script, e.g.
 

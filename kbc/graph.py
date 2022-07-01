@@ -3,7 +3,8 @@ import sys
 import numpy as np
 import itertools
 import random
-import tensorflow as tf
+# import tensorflow as tf
+import pickle
 
 
 class Graph():
@@ -41,7 +42,7 @@ class Graph():
             return "INV_" + pred
 
     def triple2key(self, triple):
-        return "|||".join(triple)
+        return tuple(triple)
 
 
     def add_edge(self, head, pred, tail):
@@ -140,7 +141,6 @@ def elements2file(elements, path):
 
 def edges2file(graph, edgefile, neg_cnt, corruption, pathlen, outdir):
     positives = EdgeList(edgefile).triples
-    positives = positives[:10] # TODO REMOVE
     negatives, negative_dict = graph.generate_negatives(positives, neg_cnt, corruption)
 
     elements = {
@@ -150,11 +150,11 @@ def edges2file(graph, edgefile, neg_cnt, corruption, pathlen, outdir):
 
     for triples, ispositive in zip((positives, negatives), (True, False)):
         for head, pred, tail in triples:
-            d_input = "SOS " + pred + "EOS"
+            d_input = " ".join(["SOS", pred, "PREDEND", head, tail, "EOP", "EOS"])
             paths = graph.find_path_excluding(head, pred, tail, pathlen)
             if len(paths) == 0:
                 continue
-            d_output = ["SOS " + " ".join(p) + "EOS" for p in paths]
+            d_output = ["SOS " + " ".join(p) + " EOS" for p in paths]
             elements[ispositive]["input"].append(d_input)
             elements[ispositive]["output"].append(d_output)
 
@@ -167,12 +167,35 @@ def create_dataset(graphfile, trainfile, devfile, testfile, neg_cnt, corruption,
     edges2file(graph, trainfile, neg_cnt, corruption, pathlen, outdir+"/train")
     edges2file(graph, devfile, neg_cnt, corruption, pathlen, outdir+"/dev")
     edges2file(graph, testfile, neg_cnt, corruption, pathlen, outdir+"/test")
-    
-        
-graphfile = "/Users/zsoori/experiments/MINERVA/datasets/data_preprocessed/countries_S1/graph.txt"
-trainfile = "/Users/zsoori/experiments/MINERVA/datasets/data_preprocessed/countries_S1/train.txt"
-devfile = "/Users/zsoori/experiments/MINERVA/datasets/data_preprocessed/countries_S1/dev.txt"
-testfile = "/Users/zsoori/experiments/MINERVA/datasets/data_preprocessed/countries_S1/test.txt"
 
-create_dataset(graphfile, trainfile, devfile, testfile, neg_cnt=10, corruption="both", pathlen=4, outdir="outdata")
+def create_data_object(graphfile, trainfile, devfile, testfile, neg_cnt, corruption, pathlen, outdir):
+    os.makedirs(outdir, exist_ok=True)
+    graph = Graph(graphfile)
+    for edgefile, name in zip((trainfile, devfile, testfile), ("train", "dev", "test")):
+        positives = EdgeList(edgefile).triples
+        # positives = positives[:10] # todo REMOVE
+        negatives, posneg_dict = graph.generate_negatives(positives, neg_cnt, corruption)
+
+        pos_dict = {}
+        for head, pred, tail in positives:
+            pos_dict[(head, pred, tail)] = graph.find_path_excluding(head, pred, tail, pathlen)
+        neg_dict = {}
+        for head, pred, tail in negatives:
+            neg_dict[(head, pred, tail)] = graph.find_path_excluding(head, pred, tail, pathlen)
+        
+        result = {"pos_dict":pos_dict, "neg_dict":neg_dict, "posneg_dict":posneg_dict}
+        outfile = "{}/{}".format(outdir, name)
+        with open(outfile, 'wb') as f:
+            pickle.dump(result, f)
+
+experiment = "WN18RR"
+# experiment = "FB15K-237"
+
+graphfile = "datasets/{}/graph.txt".format(experiment)
+trainfile = "datasets/{}/train.txt".format(experiment)
+devfile = "datasets/{}/dev.txt".format(experiment)
+testfile = "datasets/{}/test.txt".format(experiment)
+outdir = "out/{}".format(experiment)
+
+create_data_object(graphfile, trainfile, devfile, testfile, neg_cnt=50, corruption="both", pathlen=4, outdir=outdir)
 

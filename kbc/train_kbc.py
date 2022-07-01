@@ -4,8 +4,7 @@ import time
 import sys
 
 from monitor import MonitorProbs
-import mlp_data
-import losses
+import pickle
 
 LR=0.1
 LOSS_TYPE="nll" #nll, prp, prp2
@@ -14,19 +13,36 @@ MONITOR=False
 EPS=1e-5
 logEPS=tf.math.log(EPS)
 
+class Tokenizer():
+    def __init__(self):
+        self.vocab_in = []
+        self.vocab_out = []
 
-d3 = [
-    (1, (0,1,2)),
-    (1, (0,1,3)),
-]
-dp3 = [
-    (1, (1,)),
-]
+    def input2index(self, seq):
+        (head, pred, tail) = seq
+        key = pred
+        if key not in self.vocab_in:
+            self.vocab_in.append(key)
+        return self.vocab_in.index(key)
 
-nd3 = [
-    (1, (1,4)),
-]
+    def output2index(self, seq):
+        key = "|||".join(seq)
+        if key not in self.vocab_out:
+            self.vocab_out.append(key)
+        return self.vocab_out.index(key)
+    
 
+    def tokenize_dict(self, in_dict):
+        result = []
+        for inp in in_dict:
+            outputs = in_dict[inp]
+            if len(outputs) > 0:
+                inp_key = self.input2index(inp)
+                out_keys = [self.output2index(out) for out in outputs]
+                result.append((inp_key, out_keys))
+        return result
+                
+    
 
 def prepare_data(data, num_classes):    
     inputs = []
@@ -180,21 +196,13 @@ def loss_function(predictions, out, loss_type, ispositive):
         loss = log_prp_loss2(predictions, out, ispositive)
     return loss, probs, seq_probs
 
-def update(model, optimizer, inp, out, loss_type):
-    with tf.GradientTape() as tape:
-        predictions = model(inp)
-        loss, probs, seq_probs = loss_function(predictions, out, loss_type, True)
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-    print("loss: ", loss.numpy())
-    # print("gradient sum: ", [tf.reduce_sum(g).numpy() for g in gradients])
-    return loss, (loss, probs, seq_probs), (tf.zeros_like(loss), tf.zeros_like(probs), tf.zeros_like(seq_probs))
 
-def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight):
+def update(model, optimizer, inp, out, ninp, nout, loss_type, neg_weight):
     with tf.GradientTape() as tape:
         predictions = model(inp)
         ploss, pprobs, pseq_probs = loss_function(predictions, out, loss_type, True)
-        nloss, nprobs, nseq_probs = loss_function(predictions, nout, loss_type, False)
+        npredictions = model(ninp)
+        nloss, nprobs, nseq_probs = loss_function(npredictions, nout, loss_type, False)
         loss = ploss + neg_weight * nloss
         
     gradients = tape.gradient(loss, model.trainable_variables)
@@ -202,7 +210,7 @@ def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight):
     return loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs)
 
 
-def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ndata=None):
+def train(model, optimizer, data, ndata, batch_size, epochs, loss_type, neg_weight, suffix):
     train_loss = tf.keras.metrics.Mean(name='train_loss')
     train_loss_pos = tf.keras.metrics.Mean(name='train_loss_pos')
     train_loss_neg = tf.keras.metrics.Mean(name='train_loss_neg')
@@ -214,33 +222,22 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
     for e in range(epochs):
         T0 = time.time()
         print("Epoch: ", e)
-        evaluate(model, data, ndata=ndata)
         train_loss.reset_states()
         train_loss_pos.reset_states()
         train_loss_neg.reset_states()
         train_probs_pos.reset_states()
         train_probs_neg.reset_states()
         batches = make_batches(data[0], data[1], batch_size)
+        nbatches = make_batches(ndata[0], ndata[1], batch_size)
 
-        for (inp, out) in batches:
-            if ndata is None:
-                loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update(model, optimizer, inp, out, loss_type)
-                train_loss(loss)
-                train_loss_pos(ploss)
-                train_probs_pos(pprobs)
-                monitor.update_mlp(inp, out, pseq_probs)
-            else:
-                nbatches = make_batches(ndata[0], ndata[1], batch_size)
-                for (_, nout) in nbatches:
-                    if nout.shape[0] != out.shape[0]:
-                        break
-                    loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight)
-                    train_loss(loss)
-                    train_loss_pos(ploss)
-                    train_loss_neg(nloss)
-                    train_probs_pos(pprobs)
-                    train_probs_neg(nprobs)
-                    monitor.update_mlp(inp, out, pseq_probs)
+        for (inp, out), (ninp, nout) in zip(batches, nbatches):
+            loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update(model, optimizer, inp, out, ninp, nout, loss_type, neg_weight)
+            train_loss(loss)
+            train_loss_pos(ploss)
+            train_loss_neg(nloss)
+            train_probs_pos(pprobs)
+            train_probs_neg(nprobs)
+            monitor.update_mlp(inp, out, pseq_probs)
 
             # print("loss", loss.numpy())
             # print("probs", probs.numpy())
@@ -255,210 +252,103 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
         
     monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=True, showsum=True)
 
-def evaluate(model, data, ndata=None):
 
-    if ndata is not None:
-        nout = ndata[1]
-        nout = tf.math.reduce_max(nout, axis=0)
+def evaluate(model, data, tokenizer):
 
-    batches = make_batches(data[0], data[1], 1)
+    pos_dict = data["pos_dict"]
+    neg_dict = data["neg_dict"]
+    posneg_dict = data["posneg_dict"]
+
     count = 0
-    pos = 0
-    neg = 0
-    for (inp, out) in batches:
-        predictions = model(inp)
-        best = tf.math.argmax(predictions, axis=-1)
-        for b, o in zip(best, out):
-            count += 1
-            if b in o:
-                pos += 1
-            if (ndata is not None) and (nout[b] == 1):
-                neg += 1
-
-    print("EVALUATION: Count: {}, Pos: {}, Neg: {}".format(count, pos/count, neg/count))
+    top10 = 0
+    top5 = 0
+    top1 = 0
+    
+    for triple in pos_dict:
+        pos_paths = pos_dict[triple]
+        negatives = posneg_dict[triple]
+        neg_paths_list = [neg_dict[tuple(triple)] for triple in negatives]
 
 
-def run(exp):
-    if exp==1:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="nll"
-        EPOCHS = 200
-        PRETRAIN=3
-        batch_size=1
-        lr=0.1
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=True
-        NEG_WEIGHT=3
+        # evaluate model on pred
+        # we are assuming that this is the same for all the negs!!!
+        inp = tokenizer.input2index(triple)
+        inp = np.array([[float(inp)]])
+        predictions = model(inp).numpy()[0]
         
-    elif exp==2:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="prp"
-        EPOCHS = 200
-        PRETRAIN=3
-        batch_size=1
-        lr=0.1
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=True
-        NEG_WEIGHT=3
+        pos_paths = [tokenizer.output2index(p) for p in pos_paths]
+        pos_prob = np.sum(predictions[pos_paths])
+        neg_probs = []
+        for neg_paths in neg_paths_list:
+            neg_paths = [tokenizer.output2index(p) for p in neg_paths]
+            neg_prob = np.sum(predictions[neg_paths])
+            neg_probs.append(neg_prob)
+        misclassified = np.sum(neg_probs > pos_prob)
+        if misclassified < 10:
+            top10 += 1
+        if misclassified < 5:
+            top5 += 1
+        if misclassified < 1:
+            top1 += 1
+        count +=1
 
-    if exp==3:
-        d = [(0, (0,1)), (0, (0,2))]
-        dp = [(0, (1,2))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="nll"
-        EPOCHS = 100
-        PRETRAIN=20
-        batch_size=2
-        lr=0.1
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=True
-        NEG_WEIGHT=3
+    print("TOP1: {}, TOP5: {}, TOP10: {}".format(top1/count, top5/count, top10/count))
+
+
+def run(config):
+    with open(config["datadir"]+"/train", 'rb') as f:
+        traindata = pickle.load(f)
+    with open(config["datadir"]+"/dev", 'rb') as f:
+        evaldata = pickle.load(f)
+
+    pos_dict = traindata["pos_dict"]
+    neg_dict = traindata["neg_dict"]
+
+    tokenizer = Tokenizer()
+    d = tokenizer.tokenize_dict(pos_dict)
+    nd = tokenizer.tokenize_dict(neg_dict)        
+    num_classes = len(tokenizer.vocab_out)    
+
+    print("Positives: ", len(d))
+    print("Negatives: ", len(nd))
+    print("Num classes: ", num_classes)
         
-    elif exp==4:
-        d = [(0, (0,1)), (0, (0,2))]
-        dp = [(0, (1,2))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="prp"
-        EPOCHS=100
-        PRETRAIN=20
-        batch_size=2
-        lr=0.1
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=True
-        NEG_WEIGHT=3
-
-    # elif exp==5:
-    #     d=d3
-    #     dp=dp3
-    #     nd=nd3
-    #     num_classes=10
-    #     PRETRAIN=30
-    #     LOSS_TYPE="prp"
-
-    # elif exp==6:
-    #     d=d3
-    #     dp=dp3
-    #     nd=nd3
-    #     num_classes=10
-    #     PRETRAIN=30
-    #     LOSS_TYPE="nll"
-
-    # elif exp==7:
-    #     datadir="outdata/cmt_renamed/cmt_renamed"
-    #     data, vocab_in, vocab_out = mlp_data.load_data(datadir)
-    #     d = data["pos"]
-    #     nd = None #data["neg"]
-    #     dp=None
-    #     num_classes = len(vocab_out)
-    #     PRETRAIN=0
-    #     LOSS_TYPE="prp"
-
-    # elif exp==8:
-    #     datadir="outdata/cmt_renamed/cmt_renamed"
-    #     data, vocab_in, vocab_out = mlp_data.load_data(datadir)
-    #     d = data["pos"]
-    #     nd = None #data["neg"]
-    #     dp=None
-    #     num_classes = len(vocab_out)
-    #     PRETRAIN=0
-    #     LOSS_TYPE="nll"
-
-    elif exp==9:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="loglin"
-        EPOCHS = 300
-        PRETRAIN=20
-        batch_size=1
-        lr=0.003
-        optimizer_type="sgd"
-        network_sizes=(10,10,10,10)
-        softmax=False
-        NEG_WEIGHT=3
-
-    elif exp==10:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="loglin_up"
-        EPOCHS = 200
-        PRETRAIN=20
-        batch_size=1
-        lr=0.02
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=False
-        NEG_WEIGHT=3
-        
-    elif exp==11:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="loglin_down"
-        EPOCHS = 200
-        PRETRAIN=20
-        batch_size=1
-        lr=0.02
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=False
-        NEG_WEIGHT=3
-
-    elif exp==12:
-        datadir="outkbc/train"
-        data, vocab_in, vocab_out = mlp_data.load_data(datadir)
-        d = data["pos"]
-        dp=None
-        nd = data["neg"]
-        num_classes = len(vocab_out)
-        LOSS_TYPE="prp"
-        EPOCHS = 100
-        PRETRAIN=0
-        batch_size = 3
-        lr = 0.1
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=True
-        NEG_WEIGHT=0.1
-
-    model, optimizer = build_model(num_classes, network_sizes, optimizer_type, lr, softmax=softmax)
-    if PRETRAIN>0:
-        data_pretrain = prepare_data(dp, num_classes)
-        train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "{}_{}_pre".format(exp, LOSS_TYPE))
+    model, optimizer = build_model(num_classes,
+                                   config["network_sizes"],
+                                   config["optimizer_type"],
+                                   config["lr"],
+                                   softmax=config["softmax"]
+    )
     data = prepare_data(d, num_classes)
     print("Positive inputs: {}".format(len(data[0])))
-    if nd is not None:
-        ndata= prepare_data(nd, num_classes)
-        print("Negative inputs: {}".format(len(ndata[0])))
-    else:
-        ndata = None
-    train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}".format(exp, LOSS_TYPE), ndata=ndata)
+    ndata= prepare_data(nd, num_classes)
+    print("Negative inputs: {}".format(len(ndata[0])))
+    
+    train(model, optimizer, data, ndata,
+          config["batch_size"],
+          config["EPOCHS"],
+          config["LOSS_TYPE"],
+          config["NEG_WEIGHT"],
+          "{}_{}".format(config["exp"], config["LOSS_TYPE"])
+    )
 
-# run(1)
-# run(2)
-# run(3)
-# run(4)
-#run(5)
-#run(6)
-#run(7)
-#run(8)
-# run(9)
-#run(10)
-#run(11)
-run(12)
+    print("Eval on train set")
+    evaluate(model, traindata, tokenizer)
+
+    print("Eval on eval set")
+    evaluate(model, evaldata, tokenizer)
+
+config1 = {
+    "exp": 1,
+    "datadir": "out/countries_S1",
+    "LOSS_TYPE": "prp",
+    "EPOCHS": 30,
+    "batch_size": 100,
+    "lr": 0.01,
+    "optimizer_type": "sgd",
+    "network_sizes": (40,40,40),
+    "softmax": True,
+    "NEG_WEIGHT": 1.0,
+}
+
+run(config1)

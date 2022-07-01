@@ -22,14 +22,32 @@ def LogSumExp(x, axis, mask):
 
 # # probability ratio preserving (prp) loss
 # # probs is (bs * support_size)
-# def prp_loss(probs, mask_nonzero):
-#     # loss = (1 - sum probs) / prod(pow(probs, 1/k))
-#     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
-#     probs = probs * mask_nonzero
-#     n = tf.maximum(0.0, 1.0 - tf.reduce_sum(probs, axis=-1))
-#     d = tf.reduce_prod(tf.math.pow(probs, 1.0 / k), axis=-1)
-#     loss = n/(1e-5 * d)
-#     return loss
+def prp_loss(probs, mask_nonzero):
+    # loss = (1 - sum probs) / prod(pow(probs, 1/k))
+
+    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    n = tf.maximum(0.0, 1.0 - tf.reduce_sum(probs, axis=-1))
+
+    probs_with_ones = (1 - mask_nonzero) + probs
+    d = tf.reduce_prod(probs_with_ones, axis=-1)
+    d = tf.math.pow(d, 1.0 / k)
+    loss = n/(EPS + d)
+    loss = loss / (loss+1) # scale [0, inf] to [0,1]
+    return loss
+
+# prp squashed to [0,1] with x/(x+1)
+def sprp_loss(probs, mask_nonzero):
+    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    n = tf.maximum(0.0, 1.0 - tf.reduce_sum(probs, axis=-1))
+
+    probs_with_ones = (1 - mask_nonzero) + probs
+    d = tf.reduce_prod(probs_with_ones, axis=-1)
+    d = tf.math.pow(d, 1.0 / k)
+    d += n
+    d = tf.maximum(EPS, d)
+    loss = n /d
+    return loss
+    
 
 
 @tf.custom_gradient
@@ -118,14 +136,24 @@ def loss_function(real, pred, ispositive, loss_type):
     elif loss_type=="prp": # probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
         loss = prp_loss(sequence_probs, mask_nonzero_sequence)
-        loss *= tf.stop_gradient(1.0-datapoint_probs)
+        # loss *= tf.stop_gradient(1.0-datapoint_probs)
         if not ispositive:
-            loss = - loss
+            loss = 1.0 - loss
         
     elif loss_type=="lprp": # # log probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
         # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
         loss = log_prp_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
+
+    elif loss_type=="slprp": # sigmoid of lprp loss
+        loss = log_prp_loss(sequence_logprobs, mask_nonzero_sequence, True)
+        loss = tf.math.sigmoid(loss/100)
+        if not ispositive:
+            loss = 1.0 - loss
+    elif loss_type=="sprp": # squashed prp loss (equivalent to slprp, with different stability behaviour)
+        loss = sprp_loss(sequence_probs, mask_nonzero_sequence)
+        if not ispositive:
+            loss = 1.0 - loss
     else:
         assert False, "Unknown loss type" + loss_type
             

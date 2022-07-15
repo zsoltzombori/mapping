@@ -6,6 +6,8 @@ import random
 # import tensorflow as tf
 import pickle
 
+import argparse
+
 
 class Graph():
 
@@ -170,16 +172,23 @@ def create_dataset(graphfile, trainfile, devfile, testfile, neg_cnt, corruption,
 
 def create_data_object(graphfile, trainfile, devfile, testfile, neg_cnt, corruption, pathlen, outdir):
     os.makedirs(outdir, exist_ok=True)
+    print("Reading graph from file: ", graphfile)
     graph = Graph(graphfile)
     for edgefile, name in zip((trainfile, devfile, testfile), ("train", "dev", "test")):
+        print("Processing edges in: ", edgefile)
         positives = EdgeList(edgefile).triples
         # positives = positives[:10] # todo REMOVE
+        print("   Generating negative edges")
         negatives, posneg_dict = graph.generate_negatives(positives, neg_cnt, corruption)
 
         pos_dict = {}
+        print("   Collecting paths for positive edges")
+        sys.stdout.flush()
         for head, pred, tail in positives:
             pos_dict[(head, pred, tail)] = graph.find_path_excluding(head, pred, tail, pathlen)
         neg_dict = {}
+        print("   Collecting paths for negative edges")
+        sys.stdout.flush()
         for head, pred, tail in negatives:
             neg_dict[(head, pred, tail)] = graph.find_path_excluding(head, pred, tail, pathlen)
         
@@ -188,14 +197,21 @@ def create_data_object(graphfile, trainfile, devfile, testfile, neg_cnt, corrupt
         with open(outfile, 'wb') as f:
             pickle.dump(result, f)
 
-experiment = "WN18RR"
-# experiment = "FB15K-237"
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', type=str, required=True, help="A directory present in ./datasets/")
+args = parser.parse_args()
+print("\nArguments:")
+for arg in vars(args):
+  print("   ", arg, getattr(args, arg))
+print("\n")
 
-graphfile = "datasets/{}/graph.txt".format(experiment)
-trainfile = "datasets/{}/train.txt".format(experiment)
-devfile = "datasets/{}/dev.txt".format(experiment)
-testfile = "datasets/{}/test.txt".format(experiment)
-outdir = "out/{}".format(experiment)
+dataset = args.dataset
+
+graphfile = "datasets/{}/graph.txt".format(dataset)
+trainfile = "datasets/{}/train.txt".format(dataset)
+devfile = "datasets/{}/dev.txt".format(dataset)
+testfile = "datasets/{}/test.txt".format(dataset)
+outdir = "out/{}".format(dataset)
 
 create_data_object(graphfile, trainfile, devfile, testfile, neg_cnt=50, corruption="both", pathlen=4, outdir=outdir)
 

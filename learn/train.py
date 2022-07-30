@@ -306,7 +306,7 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
       print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
 
     print(count)
-    if failure:
+    if False: #failure:
       print("---------FAILURE----------")
       print(f'{"Input:":15s}: {sentence.numpy()}')
       for o in e["output"]:
@@ -323,12 +323,12 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
   print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
 
 
-print("\n\nEVALUATION on the validation set")
-if neg_examples is not None:
-  neg_examples_val = neg_examples.concatenate(neg_examples_val)
-else:
-  neg_examples_val = None  
-eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+# print("\n\nEVALUATION on the validation set")
+# if neg_examples is not None:
+#   neg_examples_val = neg_examples.concatenate(neg_examples_val)
+# else:
+#   neg_examples_val = None  
+# eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 
-#print("\n\nEVALUATION on the train set")
-#eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+print("\n\nEVALUATION on the train set")
+eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

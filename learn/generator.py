@@ -106,7 +106,83 @@ def exp3(outdir):
     dataset = tf.data.Dataset.from_tensor_slices(data)
     tf.data.experimental.save(dataset, outdir)
 
-exp3(outdir="synthetic/syn3/pos")
+# exp3(outdir="synthetic/syn3/pos")
+
+# synthetic data for sequences
+# slen: sequence length
+# ntoken: number of tokens
+# ncand: number of candidates per constraint
+# nconst: number of constraints per input
+# nsample: number of positive/negative samples
+# outdir: directory to save data
+def seq_generator(slen, ntoken, ncand, nconst, nsample, outdir):
+    tokens = [str(i) for i in range(ntoken)]
+
+    def get_random_output(tokens, slen):
+        curr_tokens = random.choices(tokens, k=slen)
+        o = "SOS {} EOS".format(" ".join(curr_tokens))
+        return o
+
+
+    # get one output that satisfies all constraints
+    good_outputs = [get_random_output(tokens, slen) for _ in range(nsample)]
+        
+    for ispositive, pname in zip((True, False), ("pos", "neg")):
+        inputs = []
+        outputs = []
+        for i in range(nsample):
+            inp = "SOS {} EOS".format(i)
+            for _ in range(nconst):
+                curr_out = []
+                for c in range(ncand):
+                    if ispositive:
+                        if c == 0: # the first candidate is going to be a good one
+                            o = good_outputs[i]
+                        else:
+                            o = get_random_output(tokens, slen)
+                    else: # negatives should not have the good one as candidate
+                        while True:
+                            o = get_random_output(tokens, slen)
+                            if o != good_outputs[i]:
+                                break                            
+                    curr_out.append(o)
+                    
+                inputs.append(inp)
+                outputs.append(curr_out)
+            
+        path = "{}/{}".format(outdir, pname)
+        outputs = tf.ragged.stack(outputs)
+        dataset = tf.data.Dataset.from_tensor_slices({"input":inputs, "output":outputs})
+        print("Element spec for {}:{}".format(path, dataset.element_spec))
+        tf.data.experimental.save(dataset, path)
+        print("   SAVED TO: ", path)
+
+def generate_sequences():
+    ntoken=10
+    nconst = 5
+    nsample = 1000
+    for slen in (1,2,3,4,5,6,7,8,9,10):
+        ncand = ((slen // 3) + 1) * 5
+        outdir = "synthetic/sec/seclen{}".format(slen)
+        seq_generator(slen=slen,
+                      ntoken=ntoken,
+                      ncand=ncand,
+                      nconst=nconst,
+                      nsample=nsample,
+                      outdir=outdir
+        )
+                      
+generate_sequences()
+
+xxx
+
+seq_generator(slen=3,
+              ntoken=10,
+              ncand=4,
+              nconst=4,
+              nsample=5,
+              outdir="synthetic/sec/sec1"
+)
 
 xxx
     

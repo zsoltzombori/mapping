@@ -9,7 +9,7 @@ import losses
 
 LR=0.1
 LOSS_TYPE="nll" #nll, prp, prp2
-MONITOR=False
+MONITOR=True
 
 EPS=1e-5
 logEPS=tf.math.log(EPS)
@@ -202,7 +202,7 @@ def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight):
     return loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs)
 
 
-def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ndata=None):
+def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ratios, ndata=None):
     train_loss = tf.keras.metrics.Mean(name='train_loss')
     train_loss_pos = tf.keras.metrics.Mean(name='train_loss_pos')
     train_loss_neg = tf.keras.metrics.Mean(name='train_loss_neg')
@@ -253,7 +253,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
         if train_probs_pos.result() == 1.0:
             break
         
-    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=True, showsum=True)
+    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=ratios, showsum=True)
 
 def evaluate(model, data, ndata=None):
 
@@ -279,7 +279,7 @@ def evaluate(model, data, ndata=None):
 
 
 def run(exp):
-    if exp==1:
+    if exp==1: # figure 1a
         d = [(0, (0,1,2))]
         dp = [(0, (0,))]
         nd=None
@@ -293,8 +293,9 @@ def run(exp):
         network_sizes=(10,10)
         softmax=True
         NEG_WEIGHT=3
+        ratios=True
         
-    elif exp==2:
+    elif exp==2: # figure 1b
         d = [(0, (0,1,2))]
         dp = [(0, (0,))]
         nd=None
@@ -308,8 +309,26 @@ def run(exp):
         network_sizes=(10,10)
         softmax=True
         NEG_WEIGHT=3
+        ratios=True
 
-    if exp==3:
+    elif exp==3: # figure 1b with zero layers
+        d = [(0, (0,1,2))]
+        dp = [(0, (0,))]
+        nd=None
+        num_classes=10
+        LOSS_TYPE="prp"
+        EPOCHS = 200
+        PRETRAIN=3
+        batch_size=1
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=True
+
+
+    if exp==4: # figure 3 left
         d = [(0, (0,1)), (0, (0,2))]
         dp = [(0, (1,2))]
         nd=None
@@ -323,8 +342,9 @@ def run(exp):
         network_sizes=(10,10)
         softmax=True
         NEG_WEIGHT=3
+        ratios=False
         
-    elif exp==4:
+    elif exp==5: # figure 3 right
         d = [(0, (0,1)), (0, (0,2))]
         dp = [(0, (1,2))]
         nd=None
@@ -338,7 +358,102 @@ def run(exp):
         network_sizes=(10,10)
         softmax=True
         NEG_WEIGHT=3
+        ratios=False
 
+    elif exp==6: # figure 4 consistent 1
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="prp"
+        EPOCHS=100
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+
+    elif exp==7: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="nll"
+        EPOCHS=100
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        
+    elif exp==8: # figure 4 inconsistent prp
+        d = [(0, (1,2,3)),
+             (0, (1,2,4)),
+             (0, (1,2,5)),
+             (0, (1,3,5)),
+             (0, (3,5,6)),
+        ]
+        dp = None
+        nd=None
+        num_classes=100
+        LOSS_TYPE="prp"
+        EPOCHS=200
+        PRETRAIN=0
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+
+    elif exp==9: # figure 4 inconsistent nll
+        d = [(0, (1,2,3)),
+             (0, (1,2,4)),
+             (0, (1,2,5)),
+             (0, (1,3,5)),
+             (0, (3,5,6)),
+        ]
+        dp = None
+        nd=None
+        num_classes=100
+        LOSS_TYPE="nll"
+        EPOCHS=200
+        PRETRAIN=0
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        
     # elif exp==5:
     #     d=d3
     #     dp=dp3
@@ -389,6 +504,7 @@ def run(exp):
         network_sizes=(10,10,10,10)
         softmax=False
         NEG_WEIGHT=3
+        ratios=True
 
     elif exp==10:
         d = [(0, (0,1,2))]
@@ -404,6 +520,7 @@ def run(exp):
         network_sizes=(10,10)
         softmax=False
         NEG_WEIGHT=3
+        ratios=True
         
     elif exp==11:
         d = [(0, (0,1,2))]
@@ -419,6 +536,7 @@ def run(exp):
         network_sizes=(10,10)
         softmax=False
         NEG_WEIGHT=3
+        ratios=True
 
     elif exp==12:
         datadir="outkbc/train"
@@ -436,11 +554,12 @@ def run(exp):
         network_sizes=(10,10)
         softmax=True
         NEG_WEIGHT=0.1
+        ratios=True
 
     model, optimizer = build_model(num_classes, network_sizes, optimizer_type, lr, softmax=softmax)
     if PRETRAIN>0:
         data_pretrain = prepare_data(dp, num_classes)
-        train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "{}_{}_pre".format(exp, LOSS_TYPE))
+        train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "{}_{}_pre".format(exp, LOSS_TYPE), ratios=ratios)
     data = prepare_data(d, num_classes)
     print("Positive inputs: {}".format(len(data[0])))
     if nd is not None:
@@ -448,17 +567,7 @@ def run(exp):
         print("Negative inputs: {}".format(len(ndata[0])))
     else:
         ndata = None
-    train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}".format(exp, LOSS_TYPE), ndata=ndata)
+    train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}".format(exp, LOSS_TYPE), ndata=ndata, ratios=ratios)
 
-# run(1)
-# run(2)
-# run(3)
-# run(4)
-#run(5)
-#run(6)
-#run(7)
-#run(8)
-# run(9)
-#run(10)
-#run(11)
-run(12)
+run(8)
+run(9)

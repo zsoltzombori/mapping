@@ -160,10 +160,10 @@ def seq_generator(slen, ntoken, ncand, nconst, nsample, outdir):
 def generate_sequences():
     ntoken=10
     nconst = 5
-    nsample = 1000
+    nsample = 100
     for slen in (1,2,3,4,5,6,7,8,9,10):
         ncand = ((slen // 3) + 1) * 5
-        outdir = "synthetic/sec/seclen{}".format(slen)
+        outdir = "synthetic/sec_100/seclen{}".format(slen)
         seq_generator(slen=slen,
                       ntoken=ntoken,
                       ncand=ncand,

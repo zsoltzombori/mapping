@@ -331,4 +331,5 @@ def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args)
 # eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
 
 print("\n\nEVALUATION on the train set")
+pos_examples = pos_examples.take(500)
 eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

@@ -1,11 +1,11 @@
 # synthetic experiments with different sequence lengths
 
-exp=135
+exp=137
 #schema="sec1"
 basedir="synthetic/sec_100"
 epochs=20
 batch_size=10
-neg_weight=0.1
+neg_weight=1.0
 num_layers=3,3
 d_model=128
 lr=0.0001
@@ -20,8 +20,8 @@ monitor_probs=0
 seq_out_len=20
 GPU=4
 
-schemas=( seclen2 seclen4 seclen6 seclen8 seclen10 ) 
-gpus=( 2 3 4 5 6 )
+schemas=( seclen1 seclen2 ) 
+gpus=( 2 3 )
 
 outdir_base="out/exp${exp}"
 checkpoint_dir_base="checkpoints/exp${exp}"

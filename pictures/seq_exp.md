@@ -1,4 +1,4 @@
-## Synthactic Experiments with Sequential Data 
+## Syntactic Experiments with Sequential Data 
 
 We have created a synthetic sequential data generator, in which the
 user can specify
@@ -14,7 +14,7 @@ was different (10 tokens, 100 distinct inputs, 5 constraints per
 inputs, 20 acceptable sequences per constraints) and trained the same
 model that was used for the CMT experiments with the prp-loss and the
 nll-loss. Below you can see the results. Note that the prp-loss
-retains a significant advantage as we change the sequence length.
+retains a significant advantage as we vary the sequence length.
 
 
 |Sequence Length | Loss type | H@1 positive | H@5 positive | H@1 negative | H@5 negative|

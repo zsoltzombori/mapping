@@ -111,7 +111,7 @@ class MonitorProbs():
         if showsum:
             keys = keys[average-1:]
             values = moving_average(values, average)
-            plot.plot(keys, values, linestyle='dashed')
+            plot.plot(keys, values, linestyle='dashed', label="Total")
 
 
         

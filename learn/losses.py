@@ -154,6 +154,11 @@ def loss_function(real, pred, ispositive, loss_type):
         loss = sprp_loss(sequence_probs, mask_nonzero_sequence)
         if not ispositive:
             loss = 1.0 - loss
+    elif loss_type=="seq_prp": # sequencial prp updates
+        assert False, "Sequencial prp updates not implemented."
+        # loss = sequencial_prp_loss(sequence_probs, mask_nonzero_sequence)
+        # if not ispositive:
+        #     loss = 1.0 - loss
     else:
         assert False, "Unknown loss type" + loss_type
             

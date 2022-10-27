@@ -102,10 +102,12 @@ tf.random.set_seed(args.seed)
 # load data
 examples, max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c = transformer.load_data(DATADIR, BUFFER_SIZE, split=SPLIT)
 
+print(max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c)
+
 
 if CHAR_TOKENIZER:
   MAX_SEQUENCE_LENGTH_IN = max_input_len_c
-  MAX_SEQUENCE_LENGTH_OUT = max_output_len_e
+  MAX_SEQUENCE_LENGTH_OUT = max_output_len_c
 else:
   MAX_SEQUENCE_LENGTH_IN = max_input_len_w
   MAX_SEQUENCE_LENGTH_OUT = max_output_len_w

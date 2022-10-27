@@ -112,10 +112,9 @@ def exp3(outdir):
 def exp4(outdir):
     in1 = "SOS EOS"
     out1 = ["SOS 1 1 EOS", "SOS 1 2 1 EOS", "SOS 1 2 2 EOS", "SOS 2 EOS"]
-    # in2 = "SOS y EOS"
-    # out2 = ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
-    # data = {"input":[in1, in2], "output": [out1, out2]}
-    data = {"input":[in1], "output": [out1]}
+    in2 = "SOS EOS"
+    out2 = ["SOS 1 1 EOS", "SOS 1 2 1 EOS", "SOS 1 2 2 EOS", "SOS 2 EOS"]
+    data = {"input":[in1, in2], "output": [out1, out2]}
     data["output"] = tf.ragged.stack(data["output"])
     dataset = tf.data.Dataset.from_tensor_slices(data)
     tf.data.experimental.save(dataset, outdir)

@@ -106,6 +106,21 @@ def exp3(outdir):
     dataset = tf.data.Dataset.from_tensor_slices(data)
     tf.data.experimental.save(dataset, outdir)
 
+# two datapoints
+# "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
+# "SOS y EOS" -> ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
+def exp4(outdir):
+    in1 = "SOS EOS"
+    out1 = ["SOS 1 1 EOS", "SOS 1 2 1 EOS", "SOS 1 2 2 EOS", "SOS 2 EOS"]
+    # in2 = "SOS y EOS"
+    # out2 = ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
+    # data = {"input":[in1, in2], "output": [out1, out2]}
+    data = {"input":[in1], "output": [out1]}
+    data["output"] = tf.ragged.stack(data["output"])
+    dataset = tf.data.Dataset.from_tensor_slices(data)
+    tf.data.experimental.save(dataset, outdir)
+
+
 # exp3(outdir="synthetic/syn3/pos")
 
 # synthetic data for sequences
@@ -174,7 +189,6 @@ def generate_sequences():
                       
 generate_sequences()
 
-xxx
 
 seq_generator(slen=3,
               ntoken=10,
@@ -184,8 +198,6 @@ seq_generator(slen=3,
               outdir="synthetic/sec/sec1"
 )
 
-xxx
-    
 
     
 # probs1 = [0.6, 0.3, 0.09, 0.01]

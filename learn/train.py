@@ -93,7 +93,7 @@ DROPOUT_RATE = 0.1
 CHECKPOINT_PATH= args.checkpoint_path
 if CHECKPOINT_PATH.lower() == "none":
   CHECKPOINT_PATH = None
-BUFFER_SIZE = 200000
+BUFFER_SIZE = 1000 #200000
 REMOVE_ARGS = args.remove_args == 1
 
 tf.random.set_seed(args.seed)
@@ -101,8 +101,6 @@ tf.random.set_seed(args.seed)
 
 # load data
 examples, max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c = transformer.load_data(DATADIR, BUFFER_SIZE, split=SPLIT)
-
-print(max_input_len_w, max_input_len_c, max_output_len_w, max_output_len_c)
 
 
 if CHAR_TOKENIZER:

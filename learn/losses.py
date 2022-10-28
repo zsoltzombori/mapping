@@ -1,3 +1,4 @@
+from xmlrpc.server import MultiPathXMLRPCServer
 import tensorflow as tf
 
 EPS=1e-20
@@ -116,7 +117,7 @@ def get_sequence_logprobs(real, pred):
     return sequence_logprobs, mask_nonzero_sequence
 
 
-def loss_function(real, pred, ispositive, loss_type):
+def loss_function(real, pred, ispositive, loss_type, multiplier=None):
     sequence_logprobs, mask_nonzero_sequence = get_sequence_logprobs(real, pred)
     
     sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
@@ -155,8 +156,28 @@ def loss_function(real, pred, ispositive, loss_type):
         if not ispositive:
             loss = 1.0 - loss
     elif loss_type=="seq_prp": # sequencial prp updates
+        from sequential.utils import seq_prp_targets, get_prob_dict
+        import jax
+        import jax.numpy as jnp
+        TOKENS = 6
+        ALPHA = 1.01
+
+        # real shape (support * bs * seq)
+        # pred shape (support * bs * seq * tokens)
+        
+        loss = 0
+        batch_size = tf.get_static_value(tf.shape(real)[1])
+        probs = tf.nn.softmax(pred, axis=-1)
+        for b in range(batch_size):
+            # Get target updates: 
+            # prob_dict = get_prob_dict(tf.get_static_value(real[:,b,:]), tf.get_static_value(probs[:,b,:,:]))
+            # print("seqs \n", tf.get_static_value(real[:,b,:]))
+            # for k in prob_dict:
+            #     print(k, " -> ", jnp.around(prob_dict[k], 2))
+            targets = seq_prp_targets(tf.get_static_value(tf.squeeze(real[:,b,:])), tf.get_static_value(tf.squeeze(probs[:,b,:,:])), TOKENS, ALPHA)
+            # Move predictions towards the targets: 
+            loss += tf.nn.l2_loss(probs - targets)
         assert False, "Sequencial prp updates not implemented."
-        # loss = sequencial_prp_loss(sequence_probs, mask_nonzero_sequence)
         # if not ispositive:
         #     loss = 1.0 - loss
     else:

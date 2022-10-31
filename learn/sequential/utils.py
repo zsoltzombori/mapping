@@ -97,9 +97,10 @@ def get_target_probs(minimums, leaves, depths, multiplier, probs):
     return result
 
 
-def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, global_multiplier):
+def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, empty, seq_len):
     # inp = pad_sequence(anc)
-    inp = sequence_to_key(anc)
+    inp = sequence_to_key(anc, padding=True, empty=empty, length=seq_len)
+    # print("Key",inp)
     if inp not in tree:
         return {}
     
@@ -116,14 +117,15 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, glo
             depth = 0
         else:
             dkey = (next_token, "descendant")
-            minimum = jnp.minimum(1.0, curr_dict[dkey] * global_multiplier / anc_prob)
+            minimum = jnp.minimum(1.0, curr_dict[dkey] * multiplier / anc_prob)
 
             anc2 = anc+[next_token]
             # inp2 = pad_sequence(anc2)
-            inp2 = sequence_to_key(anc2)
+            inp2 = sequence_to_key(anc2, padding=True, empty=empty, length=seq_len)
             is_leaf = int(inp2 not in tree)
 
-            depth = jnp.amin(curr_dict["depths"])
+            # depth = jnp.amin(curr_dict["depths"])
+            depth = min(curr_dict["depths"])
             
         leaves.append(is_leaf)
         minimums.append(minimum)
@@ -139,49 +141,47 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, glo
             anc2 = anc+[next_token]
             anc_prob2 = anc_prob * target_prob
             multiplier2 = multiplier / (target_prob / prob)
-            curr_result = build_update_dict(anc2, anc_prob2, multiplier2, tree, prob_dict, token_num, global_multiplier)
-            result = result | curr_result
+            curr_result = build_update_dict(anc2, anc_prob2, multiplier2, tree, prob_dict, token_num, empty, seq_len)
+            # result = result | curr_result
+            result.update(curr_result)
     return result
 
 
 
 
-def seq_prp_targets(sequences, probs, token_num, global_multiplier):
-    prob_dict = get_prob_dict(sequences, probs)
+def seq_prp_targets(sequences, probs, token_num, global_multiplier, empty=0):
+    prob_dict, seq_len = get_prob_dict(sequences, probs, empty=empty)
     tree = build_tree(sequences, prob_dict)
-    print("Tree:")
-    for k in tree.keys():
-        print(k, " -> ", tree[k])
+    # print("Tree:")
+    # for k in tree.keys():
+    #     print(k, " -> ", tree[k])
 
-    print("Prob:")
-    for k in prob_dict.keys():
-        print(k, " -> ", jnp.around(prob_dict[k], 2))
+    # print("Prob:")
+    # for k in prob_dict.keys():
+    #     print(k, " -> ", jnp.around(prob_dict[k], 2))
 
     init_prob = 1.0
     root = []
-    update_dict = build_update_dict(root, init_prob, global_multiplier, tree, prob_dict, token_num, global_multiplier)
+    update_dict = build_update_dict(root, init_prob, global_multiplier, tree, prob_dict, token_num, empty, seq_len)
 
-    print(update_dict)
-
-    print("Targets:")
-    for k in update_dict.keys():
-        print(k, " -> ", jnp.around(update_dict[k], 2))
+    # print("Targets:")
+    # for k in update_dict.keys():
+    #     print(k, " -> ", jnp.around(update_dict[k], 2))
 
     # create target matrix
-    # targets = []
-    # for seq in sequences:
-    #     sequence_key = sequence_to_key(seq)
-    #     targets.append(update_dict[sequence_key])
-    # targets = jnp.array(targets)
-
-    assert False, "sorryy"
+    targets = []
+    for seq in sequences:
+        # sequence_key = sequence_to_key(seq, padding=True, empty=empty, length=seq_len)
+        sequence_key = sequence_to_key(seq) # sequences are already max length
+        targets.append(update_dict[sequence_key])
+    targets = jnp.array(targets)
 
     return targets
 
 
 
 # TODO: use empty parameter when calling!
-def get_prob_dict(sequences, probs, empty=0):
+def get_prob_dict(sequences, probs, empty):
     prob_dict = {}
     max_seq_len = max([len(s) for s in sequences])
     terminal_probs = copy.deepcopy(probs[0][0])
@@ -195,4 +195,4 @@ def get_prob_dict(sequences, probs, empty=0):
                 prob_dict[prefix_key] = prob[s]
             else:
                 prob_dict[prefix_key] = terminal_probs
-    return prob_dict
+    return prob_dict, max_seq_len

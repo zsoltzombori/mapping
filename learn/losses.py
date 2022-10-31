@@ -170,16 +170,17 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None):
         probs = tf.nn.softmax(pred, axis=-1)
         for b in range(batch_size):
             # Get target updates: 
-            # prob_dict = get_prob_dict(tf.get_static_value(real[:,b,:]), tf.get_static_value(probs[:,b,:,:]))
-            # print("seqs \n", tf.get_static_value(real[:,b,:]))
-            # for k in prob_dict:
-            #     print(k, " -> ", jnp.around(prob_dict[k], 2))
+            prob_dict, _ = get_prob_dict(tf.get_static_value(tf.squeeze(real[:,b,:])), 
+                                                tf.get_static_value(tf.squeeze(probs[:,b,:,:])), 
+                                                empty=0)
+            for k in prob_dict:
+                print(k, " -> ", jnp.around(prob_dict[k], 2))
             targets = seq_prp_targets(tf.get_static_value(tf.squeeze(real[:,b,:])), tf.get_static_value(tf.squeeze(probs[:,b,:,:])), TOKENS, ALPHA)
             # Move predictions towards the targets: 
             loss += tf.nn.l2_loss(probs - targets)
-        assert False, "Sequencial prp updates not implemented."
-        # if not ispositive:
-        #     loss = 1.0 - loss
+        # assert False, "Sequencial prp updates not implemented."
+        if not ispositive:
+            loss = 1.0 - loss
     else:
         assert False, "Unknown loss type" + loss_type
             

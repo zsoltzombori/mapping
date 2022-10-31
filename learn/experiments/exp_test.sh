@@ -3,10 +3,10 @@
 exp=0
 schema=syn4
 basedir="synthetic"
-epochs=100
+epochs=5
 batch_size=1
 neg_weight=0
-num_layers=1
+num_layers=2
 d_model=32
 lr=0.001
 lr_decay_steps=30

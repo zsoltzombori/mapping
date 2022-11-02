@@ -164,18 +164,20 @@ def seq_prp_targets(sequences, probs, token_num, global_multiplier, empty=0):
     root = []
     update_dict = build_update_dict(root, init_prob, global_multiplier, tree, prob_dict, token_num, empty, seq_len)
 
-    # print("Targets:")
-    # for k in update_dict.keys():
-    #     print(k, " -> ", jnp.around(update_dict[k], 2))
+    print("Targets:")
+    for k in update_dict.keys():
+        print(k, " -> ", jnp.around(update_dict[k], 2))
 
     # create target matrix
-    targets = []
-    for seq in sequences:
-        # sequence_key = sequence_to_key(seq, padding=True, empty=empty, length=seq_len)
-        sequence_key = sequence_to_key(seq) # sequences are already max length
-        targets.append(update_dict[sequence_key])
-    targets = jnp.array(targets)
-
+    targets = copy.deepcopy(probs)
+    for s_idx, s in enumerate(sequences):
+        seq_len = len(s)
+        for i in range(seq_len):
+            next_token = s[i]
+            prefix = list(s)[:i]
+            sequence_key = sequence_to_key(prefix, padding=True, empty=empty, length=seq_len)
+            targets[s_idx][i][next_token] = update_dict[sequence_key][next_token]
+    # targets = jnp.array(targets)
     return targets
 
 

@@ -3,7 +3,7 @@
 exp=0
 schema=syn4
 basedir="synthetic"
-epochs=5
+epochs=100
 batch_size=1
 neg_weight=0
 num_layers=2

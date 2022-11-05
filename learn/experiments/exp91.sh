@@ -6,7 +6,7 @@ exp=91
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"
 epochs=20
-batch_size=40
+batch_size=20 #40
 neg_weight=3
 num_layers=4
 d_model=128
@@ -19,10 +19,12 @@ CHAR_TOKENIZER=0
 loss_type="lprp"
 split="0.7,0.15,0.15"
 monitor_probs=0
-GPU=5
+GPU=1
 
-schemas=( cmt_renamed cmt_denormalized cmt_mixed cmt_naive_ci cmt_structured_ci cmt_structured )
-gpus=( 7 7 6 6 5 5 )
+# schemas=( cmt_renamed cmt_denormalized cmt_mixed cmt_naive_ci cmt_structured_ci cmt_structured )
+# gpus=( 0 1 2 2 3 3 )
+schemas=( cmt_renamed cmt_denormalized cmt_structured )
+gpus=( 1 2 3 )
 
 outdir_base="out/exp${exp}"
 checkpoint_dir_base="checkpoints/exp${exp}"

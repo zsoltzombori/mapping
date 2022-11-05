@@ -117,7 +117,7 @@ def get_sequence_logprobs(real, pred):
     return sequence_logprobs, mask_nonzero_sequence
 
 
-def loss_function(real, pred, ispositive, loss_type, multiplier=None):
+def loss_function(real, pred, ispositive, loss_type, multiplier=None, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None):
     sequence_logprobs, mask_nonzero_sequence = get_sequence_logprobs(real, pred)
     
     sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
@@ -144,6 +144,10 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None):
     elif loss_type=="lprp": # # log probability ratio preserving (prp) loss
         # loss = (1 - sum probs) / prod(pow(probs, 1/k))
         # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
+        probs = tf.nn.softmax(pred, axis=-1)
+        print("Probs (batch_idx=0):")
+        print(tf.squeeze(probs[:,0,:,:]))
+
         loss = log_prp_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
 
     elif loss_type=="slprp": # sigmoid of lprp loss
@@ -156,11 +160,10 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None):
         if not ispositive:
             loss = 1.0 - loss
     elif loss_type=="seq_prp": # sequencial prp updates
-        from sequential.utils import seq_prp_targets, get_prob_dict
-        import jax
-        import jax.numpy as jnp
+        from sequential.utils import seq_prp_targets
+        ALPHA = 1.05
         TOKENS = 6
-        ALPHA = 1.01
+        EMPTY=0
 
         # real shape (support * bs * seq)
         # pred shape (support * bs * seq * tokens)
@@ -168,37 +171,46 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None):
         loss = 0
         batch_size = tf.get_static_value(tf.shape(real)[1])
         probs = tf.nn.softmax(pred, axis=-1)
-        for b in range(batch_size):
-            # Get target updates: 
-            # prob_dict, _ = get_prob_dict(tf.get_static_value(tf.squeeze(real[:,b,:])), 
-            #                                     tf.get_static_value(tf.squeeze(probs[:,b,:,:])), 
-            #                                     empty=0)
-            # print("Predictions:")
-            # # for k in prob_dict:
-            # #     print(k, " -> ", jnp.around(prob_dict[k], 2))
-            # print(probs.shape)
-            # print(probs)
 
-            targets = seq_prp_targets(tf.get_static_value(tf.squeeze(real[:,b,:])), tf.get_static_value(tf.squeeze(probs[:,b,:,:])), TOKENS, ALPHA)
+        target_list = []
+        target_shape = pred.get_shape()
+        targets = tf.zeros(target_shape)
+        if compute_explicit_targets:
+            for b in range(batch_size): # TODO: Parallelize the loop!!!
+                # Get target updates: 
+                sequences_b = tf.get_static_value(tf.squeeze(real[:,b,:]))
+                probabilities_b = tf.get_static_value(tf.squeeze(probs[:,b,:,:]))
+                targets_b = seq_prp_targets(sequences_b, probabilities_b, TOKENS, ALPHA)
+                target_list.append(targets_b)
 
-            # print("Targets:")
-            # print(targets.shape)
-            # print(targets)
+            targets = tf.transpose(tf.stack(target_list), perm=[1,0,2,3])
+            targets_mask = tf.math.not_equal(probs, targets)
+        else:
+            assert explicit_targets is not None, "Explicit targets need to be provided, if not computed."
+            assert explicit_target_mask is not None, "Explicit target mask needs to be provided, if targets are not computed."
+            targets = explicit_targets
+            targets_mask = explicit_target_mask
 
-            # Move predictions towards the targets: 
-            # print("DIFF:")
-            # print(tf.squeeze(probs[:,b,:,:]) - targets)
-            loss += tf.nn.l2_loss(tf.squeeze(probs[:,b,:,:]) - targets)
-        # assert False, "Sequencial prp updates not implemented."
-        if not ispositive:
-            loss = 1.0 - loss
+        # prob_weights = []
+        # for b in range(batch_size): 
+        #     sequences_b = tf.get_static_value(tf.squeeze(real[:,b,:]))
+        #     prob_weights.append(get_prob_weights(sequences_b))
+        seq_elements = tf.cast(tf.reshape(tf.get_static_value(real), [-1]), tf.int64)  #flatten
+        prob_weights = tf.cast(tf.math.not_equal(seq_elements, tf.cast(tf.fill(seq_elements.shape, EMPTY), tf.int64)), tf.float32)
+        # loss = tf.nn.l2_loss(weights*(probs[targets_mask] - targets[targets_mask]))
+        # categorical cross entropy
+        loss = (-1)*prob_weights*targets[targets_mask]*tf.nn.log_softmax(probs[targets_mask])
     else:
         assert False, "Unknown loss type" + loss_type
-            
 
-    loss = tf.reduce_mean(loss)
     probs = tf.reduce_mean(datapoint_probs)
-    return loss, probs, sequence_probs    
+    loss = tf.reduce_mean(loss)
+
+    if loss_type=="seq_prp":
+        # Return explicit targets to fit + mask
+        return loss, probs, sequence_probs, targets, targets_mask
+    else:
+        return loss, probs, sequence_probs    
         
 
 def loss_function_joint(real_pos, real_neg, pred_pos, pred_neg):

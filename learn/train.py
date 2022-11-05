@@ -48,6 +48,8 @@ parser.add_argument('--monitor_probs', type=int, default=0)
 parser.add_argument('--filter_pn', type=int, default=0)
 parser.add_argument('--seed', type=int, default=100)
 parser.add_argument('--seq_out_len', type=int, default=20)
+parser.add_argument('--opt_steps', type=int, default=1)
+
 
 args = parser.parse_args()
 
@@ -81,6 +83,7 @@ WARMUP_STEPS = 4000 # int(train_size / BATCH_SIZE * EPOCHS / 10)
 OPTIMIZER=args.optimizer
 BETA_1=args.beta1
 BETA_2=args.beta2
+OPT_STEPS=args.opt_steps
 
 # transformer parameters
 NUM_LAYERS = args.num_layers
@@ -194,7 +197,7 @@ else:
   ckpt_manager = None
 
 # train the transformer
-transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE,
+transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE, OPT_STEPS,
                   outdir=OUTDIR,
                   monitor_probs=MONITOR_PROBS,
                   filter_pn=FILTER_PN,

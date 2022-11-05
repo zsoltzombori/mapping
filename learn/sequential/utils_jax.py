@@ -1,8 +1,8 @@
 import os
 import sys
 import copy
-# import jax
-import numpy as np
+import jax
+import jax.numpy as jnp
 
 
 def sequence_to_key(sequence, padding=False, empty=0, length=10):
@@ -70,13 +70,13 @@ def build_tree(sequences, prob_dict, empty=0):
 
 
 def get_target_probs(minimums, leaves, depths, multiplier, probs):    
-    minimums = np.array(minimums)
+    minimums = jnp.array(minimums)
     # print("Minimums", minimums)
-    leaves = np.array(leaves)
-    depths = np.array(depths)
+    leaves = jnp.array(leaves)
+    depths = jnp.array(depths)
 
-    slacks = np.equal(minimums, 0)
-    nonleaves = np.equal(leaves, 0)
+    slacks = jnp.equal(minimums, 0)
+    nonleaves = jnp.equal(leaves, 0)
 
     # leaves should get their minimum
     leaf_targets = leaves * minimums
@@ -84,14 +84,14 @@ def get_target_probs(minimums, leaves, depths, multiplier, probs):
     # nonleaf targets start from the minimum and then get promoted
     nonleaf_targets = nonleaves * minimums
 
-    capacity = 1 - np.sum(minimums)
+    capacity = 1 - jnp.sum(minimums)
 
-    curr_multiplier = multiplier ** (1/np.maximum(1,depths))
+    curr_multiplier = multiplier ** (1/jnp.maximum(1,depths))
     ideal_nonleaf_targets = (slacks * probs + (1-slacks) * curr_multiplier * probs) * nonleaves
 
-    direction = np.maximum(0.0, ideal_nonleaf_targets - nonleaf_targets)
-    if np.sum(direction) > 0:
-        nonleaf_targets += direction / np.sum(direction) * capacity
+    direction = jnp.maximum(0.0, ideal_nonleaf_targets - nonleaf_targets)
+    if jnp.sum(direction) > 0:
+        nonleaf_targets += direction / jnp.sum(direction) * capacity
 
     result = leaf_targets + nonleaf_targets
     return result
@@ -117,7 +117,7 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, emp
             depth = 0
         else:
             dkey = (next_token, "descendant")
-            minimum = np.minimum(1.0, curr_dict[dkey] * multiplier / anc_prob)
+            minimum = jnp.minimum(1.0, curr_dict[dkey] * multiplier / anc_prob)
 
             anc2 = anc+[next_token]
             # inp2 = pad_sequence(anc2)
@@ -164,9 +164,9 @@ def seq_prp_targets(sequences, probs, token_num, global_multiplier, empty=0):
     root = []
     update_dict = build_update_dict(root, init_prob, global_multiplier, tree, prob_dict, token_num, empty, seq_len)
 
-    # print("Targets:")
-    # for k in update_dict.keys():
-    #     print(k, " -> ", np.around(update_dict[k], 2))
+    print("Targets:")
+    for k in update_dict.keys():
+        print(k, " -> ", jnp.around(update_dict[k], 2))
 
     # create target matrix
     targets = copy.deepcopy(probs)
@@ -198,13 +198,3 @@ def get_prob_dict(sequences, probs, empty):
             else:
                 prob_dict[prefix_key] = terminal_probs
     return prob_dict, max_seq_len
-
-
-# TODO: test weighting schemes for conditional probabilities, given the sequence prob tree
-# def get_prob_weights(sequences, token_num):
-#     for s_idx, s in enumerate(sequences):
-#         seq_len = len(s)
-#         for i in range(seq_len):
-#             next_token = s[i]
-#             prefix = list(s)[:i]
-#     return 

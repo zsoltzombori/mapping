@@ -110,9 +110,9 @@ def exp3(outdir):
 # "SOS x EOS" -> ["SOS a EOS", "SOS b EOS", "SOS c EOS"]
 # "SOS y EOS" -> ["SOS d EOS", "SOS e EOS", "SOS f EOS"]
 def exp4(outdir):
-    in1 = "SOS EOS"
+    in1 = "SOS x EOS"
     out1 = ["SOS 1 1 EOS EOS", "SOS 1 2 1 EOS EOS", "SOS 1 2 2 EOS EOS", "SOS 2 EOS EOS"]
-    in2 = "SOS EOS"
+    in2 = "SOS x EOS"
     out2 = ["SOS 1 1 EOS EOS", "SOS 1 2 1 EOS EOS", "SOS 1 2 2 EOS EOS", "SOS 2 EOS EOS"]
     data = {"input":[in1, in2], "output": [out1, out2]}
     data["output"] = tf.ragged.stack(data["output"])

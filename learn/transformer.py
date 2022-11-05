@@ -653,9 +653,8 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                 if loss_type == "seq_prp":
                     if opt_step==0:
                         pos_loss, pos_probs, pos_sequence_probs, custom_targets, nonslack_mask = loss_function(pos_tar_real, pos_predictions, True, loss_type, compute_explicit_targets=True, explicit_targets=None, explicit_target_mask=None)
-                        probs = tf.nn.softmax(pos_predictions, axis=-1)
                         # slacks = tf.cast(tf.math.equal(probs, custom_targets), tf.float32)
-                        if epoch==(epochs-1):
+                        if (epoch+1) % 100:
                             # print("Predictions", probs)
                             print(f"Epoch {epoch} \n Sequences: \n {pos_tar_real} \n Targets: \n {custom_targets[nonslack_mask]}")
                             # print("Diff", custom_targets - probs)

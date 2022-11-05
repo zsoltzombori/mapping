@@ -161,7 +161,7 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None, compute_ex
             loss = 1.0 - loss
     elif loss_type=="seq_prp": # sequencial prp updates
         from sequential.utils import seq_prp_targets
-        ALPHA = 1.05
+        ALPHA = 1.1
         TOKENS = 6
         EMPTY=0
 
@@ -197,9 +197,9 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None, compute_ex
         #     prob_weights.append(get_prob_weights(sequences_b))
         seq_elements = tf.cast(tf.reshape(tf.get_static_value(real), [-1]), tf.int64)  #flatten
         prob_weights = tf.cast(tf.math.not_equal(seq_elements, tf.cast(tf.fill(seq_elements.shape, EMPTY), tf.int64)), tf.float32)
-        # loss = tf.nn.l2_loss(weights*(probs[targets_mask] - targets[targets_mask]))
+        loss = tf.nn.l2_loss(prob_weights*(probs[targets_mask] - targets[targets_mask]))
         # categorical cross entropy
-        loss = (-1)*prob_weights*targets[targets_mask]*tf.nn.log_softmax(probs[targets_mask])
+        # loss = (-1)*prob_weights*targets[targets_mask]*tf.nn.log_softmax(probs[targets_mask])
     else:
         assert False, "Unknown loss type" + loss_type
 

@@ -3,12 +3,12 @@
 exp=0
 schema=syn4
 basedir="synthetic"
-epochs=500
+epochs=2000
 batch_size=1 # 1
 neg_weight=0
 num_layers=1 # 2
 d_model=1024
-lr=0.01 # 0.005
+lr=0.005
 lr_decay_steps=1000000 # not applied if steps>epochs, TODO: verify
 # optimizer=adamax   # tensorflow.python.framework.errors_impl.InvalidArgumentError: Incompatible shapes: [20] vs. [11] [Op:Mul]
 # beta1=0.3
@@ -22,6 +22,7 @@ split="1,0,0"
 monitor_probs=1
 GPU=0
 opt_steps=50 # 100
+alpha=1.005
 
 echo "Schema $schema"
 echo "GPU $GPU"
@@ -32,7 +33,7 @@ outdir="out/exp${exp}"
 mkdir -p $outdir
 
 # --checkpoint_path ${checkpoint_dir}
-CMD="python train.py --datadir $datadir --epochs $epochs --batch_size ${batch_size} --neg_weight ${neg_weight} --num_layers ${num_layers} --d_model ${d_model} --lr ${lr} --lr_decay_steps ${lr_decay_steps} --optimizer $optimizer --beta1 $beta1 --beta2 $beta2 --char_tokenizer $CHAR_TOKENIZER --loss_type ${loss_type} --split ${split} --outdir ${outdir} --monitor_probs $monitor_probs --opt_steps $opt_steps" 
+CMD="python train.py --datadir $datadir --epochs $epochs --batch_size ${batch_size} --neg_weight ${neg_weight} --num_layers ${num_layers} --d_model ${d_model} --lr ${lr} --lr_decay_steps ${lr_decay_steps} --optimizer $optimizer --beta1 $beta1 --beta2 $beta2 --char_tokenizer $CHAR_TOKENIZER --loss_type ${loss_type} --split ${split} --outdir ${outdir} --monitor_probs $monitor_probs --opt_steps $opt_steps --multiplier $alpha" 
 CMD="nohup $CMD > $outdir/${schema}.cout 2> $outdir/${schema}.cerr &"
 CMD="CUDA_VISIBLE_DEVICES=$GPU $CMD"
 echo $CMD

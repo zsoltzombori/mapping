@@ -1,5 +1,6 @@
 from xmlrpc.server import MultiPathXMLRPCServer
 import tensorflow as tf
+from sequential.utils import seq_prp_targets
 
 EPS=1e-20
 logEPS=tf.math.log(EPS)
@@ -117,7 +118,7 @@ def get_sequence_logprobs(real, pred):
     return sequence_logprobs, mask_nonzero_sequence
 
 
-def loss_function(real, pred, ispositive, loss_type, multiplier=None, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None):
+def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None):
     sequence_logprobs, mask_nonzero_sequence = get_sequence_logprobs(real, pred)
     
     sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
@@ -160,10 +161,9 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=None, compute_ex
         if not ispositive:
             loss = 1.0 - loss
     elif loss_type=="seq_prp": # sequencial prp updates
-        from sequential.utils import seq_prp_targets
-        ALPHA = 1.1
-        TOKENS = 6
-        EMPTY=0
+        ALPHA = multiplier
+        TOKENS = token_num
+        EMPTY = 0
 
         # real shape (support * bs * seq)
         # pred shape (support * bs * seq * tokens)

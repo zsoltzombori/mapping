@@ -137,7 +137,10 @@ class MyTokenizer:
         else:
             split = "whitespace"
             ngrams=None
-
+        """
+        "int": Outputs integer indices, one integer index per split string token. When output_mode == "int", 
+        0 is reserved for masked locations; this reduces the vocab size to max_tokens - 2 instead of max_tokens - 1.
+        """
         self.tokenizer = TextVectorization(
             max_tokens=vocab_size,
             output_mode='int',
@@ -581,11 +584,14 @@ train_step_signature = [
 
 train_step_signature_noneg = [
   tf.TensorSpec(shape=(None, None), dtype=tf.int64),
-  tf.TensorSpec(shape=(None, None, None), dtype=tf.int64),
+  tf.TensorSpec(shape=(None, None, None), dtype=tf.int64)
 ]
 
 
-def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type, opt_steps,
+def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type,
+          opt_steps=None,
+          multiplier=1.0,
+          token_num=1,
           monitor_probs=False,
           filter_pn=False,
           outdir=None,
@@ -652,14 +658,24 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                 pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=1)
                 if loss_type == "seq_prp":
                     if opt_step==0:
-                        pos_loss, pos_probs, pos_sequence_probs, custom_targets, nonslack_mask = loss_function(pos_tar_real, pos_predictions, True, loss_type, compute_explicit_targets=True, explicit_targets=None, explicit_target_mask=None)
+                        pos_loss, pos_probs, pos_sequence_probs, custom_targets, nonslack_mask = loss_function(pos_tar_real, pos_predictions, True, loss_type, 
+                                                                                                              multiplier=multiplier,
+                                                                                                              token_num=token_num,
+                                                                                                              compute_explicit_targets=True, 
+                                                                                                              explicit_targets=None, 
+                                                                                                              explicit_target_mask=None)
                         # slacks = tf.cast(tf.math.equal(probs, custom_targets), tf.float32)
                         if (epoch+1) % 100 == 0:
                             # print("Predictions", probs)
                             print(f"Epoch {epoch} \n Sequences: \n {pos_tar_real} \n Targets: \n {custom_targets[nonslack_mask]}")
                             # print("Diff", custom_targets - probs)
                     else:
-                        pos_loss, pos_probs, pos_sequence_probs, _, _= loss_function(pos_tar_real, pos_predictions, True, loss_type, compute_explicit_targets=False, explicit_targets=custom_targets, explicit_target_mask=nonslack_mask)
+                        pos_loss, pos_probs, pos_sequence_probs, _, _= loss_function(pos_tar_real, pos_predictions, True, loss_type,
+                                                                                    multiplier=multiplier,
+                                                                                    token_num=token_num, 
+                                                                                    compute_explicit_targets=False, 
+                                                                                    explicit_targets=custom_targets, 
+                                                                                    explicit_target_mask=nonslack_mask)
 
                     # print("Labels",(1-slacks)*custom_targets)
                     # loss = tf.nn.softmax_cross_entropy_with_logits(labels=(1-slacks)*custom_targets, logits=pos_predictions)
@@ -701,7 +717,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         
         if neg_batches is None:
             for (pos_inp, pos_tar) in pos_batches:
-                train_step_noneg(pos_inp, pos_tar, opt_steps)
+                train_step_noneg(pos_inp, pos_tar, opt_steps=opt_steps)
         else:
             assert loss_type!="seq_prp", "SeqPRP undefined for negative examples."
             # for ((pos_inp, pos_tar), (neg_inp, neg_tar)) in zip(pos_batches, neg_batches):

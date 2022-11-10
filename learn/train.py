@@ -49,6 +49,7 @@ parser.add_argument('--filter_pn', type=int, default=0)
 parser.add_argument('--seed', type=int, default=100)
 parser.add_argument('--seq_out_len', type=int, default=20)
 parser.add_argument('--opt_steps', type=int, default=1)
+parser.add_argument('--multiplier', type=float, default=1.0)
 
 
 args = parser.parse_args()
@@ -84,6 +85,8 @@ OPTIMIZER=args.optimizer
 BETA_1=args.beta1
 BETA_2=args.beta2
 OPT_STEPS=args.opt_steps
+ALPHA=args.multiplier
+
 
 # transformer parameters
 NUM_LAYERS = args.num_layers
@@ -134,6 +137,8 @@ print("Input vocab size: ", len(tokenizer_in.vocabulary))
 # print(tokenizer_in.vocabulary)
 print("Output vocab size: ", len(tokenizer_out.vocabulary))
 # print(tokenizer_out.vocabulary)
+
+TOKENS = len(tokenizer_out.vocabulary)
 
 
 # create batches of training data
@@ -197,7 +202,10 @@ else:
   ckpt_manager = None
 
 # train the transformer
-transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE, OPT_STEPS,
+transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE, 
+                  opt_steps=OPT_STEPS,
+                  multiplier=ALPHA,
+                  token_num=TOKENS,
                   outdir=OUTDIR,
                   monitor_probs=MONITOR_PROBS,
                   filter_pn=FILTER_PN,

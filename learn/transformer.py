@@ -664,11 +664,14 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                                                                                                               compute_explicit_targets=True, 
                                                                                                               explicit_targets=None, 
                                                                                                               explicit_target_mask=None)
-                        # slacks = tf.cast(tf.math.equal(probs, custom_targets), tf.float32)
-                        if (epoch+1) % 100 == 0:
-                            # print("Predictions", probs)
+                        if (epoch+1) % 20 == 0:
                             print(f"Epoch {epoch} \n Sequences: \n {pos_tar_real} \n Targets: \n {custom_targets[nonslack_mask]}")
-                            # print("Diff", custom_targets - probs)
+                        if (epoch+1) % 10 == 0:
+                            ratios = []
+                            pos_seq_probs = tf.squeeze((pos_sequence_probs)).numpy()
+                            for s,seq_pos in enumerate(pos_seq_probs):
+                              ratios += [seq_pos/pos for pos in pos_seq_probs[(s+1):]]
+                            print(f"Epoch {epoch} -- Prob Ratios: ", ratios)
                     else:
                         pos_loss, pos_probs, pos_sequence_probs, _, _= loss_function(pos_tar_real, pos_predictions, True, loss_type,
                                                                                     multiplier=multiplier,

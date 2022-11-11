@@ -5,7 +5,7 @@ schema=syn4
 basedir="synthetic"
 epochs=2000
 batch_size=1 # 1
-neg_weight=0
+neg_weight=3
 num_layers=1 # 2
 d_model=1024
 lr=0.005
@@ -21,8 +21,8 @@ loss_type="seq_prp" # "seq_prp" "lprp"
 split="1,0,0"
 monitor_probs=1
 GPU=0
-opt_steps=50 # 100
-alpha=1.005
+opt_steps=5 # 100
+alpha=1.01
 
 echo "Schema $schema"
 echo "GPU $GPU"

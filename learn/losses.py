@@ -1,6 +1,6 @@
 from xmlrpc.server import MultiPathXMLRPCServer
 import tensorflow as tf
-from sequential.utils import seq_prp_targets
+from sequential.utils import seq_prp_targets, get_prob_weights
 
 EPS=1e-20
 logEPS=tf.math.log(EPS)
@@ -191,15 +191,17 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
             targets = explicit_targets
             targets_mask = explicit_target_mask
 
-        # prob_weights = []
-        # for b in range(batch_size): 
-        #     sequences_b = tf.get_static_value(tf.squeeze(real[:,b,:]))
-        #     prob_weights.append(get_prob_weights(sequences_b))
-        seq_elements = tf.cast(tf.reshape(tf.get_static_value(real), [-1]), tf.int64)  #flatten
-        prob_weights = tf.cast(tf.math.not_equal(seq_elements, tf.cast(tf.fill(seq_elements.shape, EMPTY), tf.int64)), tf.float32)
-        loss = tf.nn.l2_loss(prob_weights*(probs[targets_mask] - targets[targets_mask]))
-        # categorical cross entropy
-        # loss = (-1)*prob_weights*targets[targets_mask]*tf.nn.log_softmax(probs[targets_mask])
+        # Calculate probability weights: how much each prob should affect the loss
+        sequences = tf.get_static_value(real)
+        prob_weights = tf.constant(get_prob_weights(sequences, TOKENS, EMPTY, shape=probs.shape, dtype=probs.dtype.as_numpy_dtype))
+        prob_weights_masked = prob_weights[targets_mask]
+        # Euclidean Distance Loss
+        diff = probs[targets_mask] - targets[targets_mask]
+        weighted_diff = tf.multiply(prob_weights_masked, diff)
+        loss = tf.nn.l2_loss(weighted_diff)
+        # Categorical Cross Entropy Loss
+        # weighted_CE = tf.multiply(tf.multiply(prob_weights_masked, targets[targets_mask]), tf.nn.log_softmax(probs)[targets_mask])
+        # loss = (-1)*weighted_CE
     else:
         assert False, "Unknown loss type" + loss_type
 

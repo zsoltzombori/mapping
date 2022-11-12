@@ -201,10 +201,27 @@ def get_prob_dict(sequences, probs, empty):
 
 
 # TODO: test weighting schemes for conditional probabilities, given the sequence prob tree
-# def get_prob_weights(sequences, token_num):
+# def get_prob_weights(sequences, token_num, empty):
+#     weights = []
 #     for s_idx, s in enumerate(sequences):
 #         seq_len = len(s)
 #         for i in range(seq_len):
 #             next_token = s[i]
-#             prefix = list(s)[:i]
-#     return 
+#             # prefix = list(s)[:i]
+#             if next_token==empty:
+#                 weights.append(1.0)
+#             else:
+#                 weights.append(1.0)
+#     return weights
+
+
+def get_prob_weights(sequences, token_num, empty, shape, dtype):
+    weights = np.zeros(shape, dtype=dtype)
+    for index, token in np.ndenumerate(sequences):
+        if token!=empty:
+            weights[index] += 1.0
+    return weights
+
+
+
+

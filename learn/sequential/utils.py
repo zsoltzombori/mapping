@@ -4,6 +4,7 @@ import copy
 # import jax
 import numpy as np
 
+EPS = 1e-8
 
 def sequence_to_key(sequence, padding=False, empty=0, length=10):
     if padding:
@@ -62,7 +63,7 @@ def build_tree(sequences, prob_dict, empty=0):
     ratios = []
     for i in range(len(seq_prob_list)):
         for j in range(i+1, len(seq_prob_list)):
-            ratios.append(seq_prob_list[i] / seq_prob_list[j])
+            ratios.append(seq_prob_list[i] / (seq_prob_list[j] + EPS))
     # print("Ratios: ", np.around(np.asarray(ratios),2))
     # print("Sum prob: ", jnp.sum(jnp.array(seq_prob_list)))
     return tree
@@ -117,7 +118,7 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, emp
             depth = 0
         else:
             dkey = (next_token, "descendant")
-            minimum = np.minimum(1.0, curr_dict[dkey] * multiplier / anc_prob)
+            minimum = np.minimum(1.0, curr_dict[dkey] * multiplier / (anc_prob + EPS))
 
             anc2 = anc+[next_token]
             # inp2 = pad_sequence(anc2)
@@ -140,7 +141,7 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, emp
             target_prob = target_probs[next_token]
             anc2 = anc+[next_token]
             anc_prob2 = anc_prob * target_prob
-            multiplier2 = multiplier / (target_prob / prob)
+            multiplier2 = multiplier / (target_prob / (prob + EPS) + EPS)
             curr_result = build_update_dict(anc2, anc_prob2, multiplier2, tree, prob_dict, token_num, empty, seq_len)
             # result = result | curr_result
             result.update(curr_result)

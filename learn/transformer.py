@@ -11,6 +11,8 @@ SUPPORT_SIZE=50
 
 NEG_SUPPORT_THRESHOLD = 200
 
+EPS = 1e-8
+
 import collections
 import os
 import pathlib
@@ -671,7 +673,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                             ratios = []
                             pos_seq_probs = tf.squeeze((pos_sequence_probs)).numpy()
                             for s,seq_pos in enumerate(pos_seq_probs):
-                                ratios += [seq_pos/pos for pos in pos_seq_probs[(s+1):]]
+                                ratios += [seq_pos/(pos+EPS) for pos in pos_seq_probs[(s+1):]]
                             print(f"Epoch {epoch} -- Prob Ratios: ", ratios)
                     else:
                         pos_loss, pos_probs, pos_sequence_probs, _, _= loss_function(pos_tar_real, pos_predictions, True, loss_type,

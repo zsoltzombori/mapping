@@ -5,8 +5,8 @@
 #           monitor_probs = 1 !!
 
 exp=911
-epochs=10
-batch_size=20
+epochs=20
+batch_size=10
 neg_weight=0.0
 num_layers=4
 d_model=128

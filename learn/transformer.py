@@ -11,6 +11,8 @@ SUPPORT_SIZE=50
 
 NEG_SUPPORT_THRESHOLD = 200
 
+EPS = 1e-8
+
 import collections
 import os
 import pathlib
@@ -653,7 +655,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
             predictions, _ = transformer([inp, tar_inp], training = False)
             return predictions
 
-        for opt_step in range(opt_steps):      
+        for opt_step in range(opt_steps):   
             with tf.GradientTape() as tape:
                 pos_predictions = tf.map_fn(get_prediction, pos_tar, fn_output_signature=tf.TensorSpec(shape=[None, None, None], dtype=tf.float32), parallel_iterations=1)
                 if loss_type == "seq_prp":
@@ -664,13 +666,14 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                                                                                                               compute_explicit_targets=True, 
                                                                                                               explicit_targets=None, 
                                                                                                               explicit_target_mask=None)
+                        # Logging
                         if (epoch+1) % 20 == 0:
                             print(f"Epoch {epoch} \n Sequences: \n {pos_tar_real} \n Targets: \n {custom_targets[nonslack_mask]}")
-                        if (epoch+1) % 10 == 0:
+                        if (epoch) % 10 == 0:
                             ratios = []
                             pos_seq_probs = tf.squeeze((pos_sequence_probs)).numpy()
                             for s,seq_pos in enumerate(pos_seq_probs):
-                              ratios += [seq_pos/pos for pos in pos_seq_probs[(s+1):]]
+                                ratios += [seq_pos/(pos+EPS) for pos in pos_seq_probs[(s+1):]]
                             print(f"Epoch {epoch} -- Prob Ratios: ", ratios)
                     else:
                         pos_loss, pos_probs, pos_sequence_probs, _, _= loss_function(pos_tar_real, pos_predictions, True, loss_type,
@@ -679,18 +682,10 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                                                                                     compute_explicit_targets=False, 
                                                                                     explicit_targets=custom_targets, 
                                                                                     explicit_target_mask=nonslack_mask)
-
-                    # print("Labels",(1-slacks)*custom_targets)
-                    # loss = tf.nn.softmax_cross_entropy_with_logits(labels=(1-slacks)*custom_targets, logits=pos_predictions)
-                    # loss = (-1)*tf.reduce_sum((1-slacks)*custom_targets*tf.nn.log_softmax(pos_predictions))
                     loss = pos_loss
                 else:
                   pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
-                  # print("pos_loss", pos_loss)
                   loss = pos_loss
-
-            # if opt_step==0 or opt_step==(opt_steps-1):
-            #     print(f"Epoch {epoch}  GD step {opt_step+1} Loss {loss}.")
 
             gradients = tape.gradient(loss, transformer.trainable_variables)
             gradients = [tf.clip_by_norm(g, CLIP_NORM) for g in gradients]

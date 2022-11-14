@@ -4,13 +4,13 @@ exp=0
 schema=syn4
 basedir="synthetic"
 epochs=2000
-batch_size=1 # 1
-neg_weight=3
+batch_size=2 # 1
+neg_weight=0.0
 num_layers=1 # 2
 d_model=1024
-lr=0.005
+lr=0.001
 lr_decay_steps=1000000 # not applied if steps>epochs, TODO: verify
-# optimizer=adamax   # tensorflow.python.framework.errors_impl.InvalidArgumentError: Incompatible shapes: [20] vs. [11] [Op:Mul]
+# optimizer=adamax
 # beta1=0.3
 # beta2=0.9
 optimizer=sgd # default: sgd
@@ -21,8 +21,8 @@ loss_type="seq_prp" # "seq_prp" "lprp"
 split="1,0,0"
 monitor_probs=1
 GPU=0
-opt_steps=5 # 100
-alpha=1.01
+opt_steps=20 # 100
+alpha=1.05
 
 echo "Schema $schema"
 echo "GPU $GPU"

@@ -193,7 +193,7 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
 
         # Calculate probability weights: how much each prob should affect the loss
         sequences = tf.get_static_value(real)
-        prob_weights = tf.constant(get_prob_weights(sequences, TOKENS, EMPTY, shape=probs.shape, dtype=probs.dtype.as_numpy_dtype))
+        prob_weights = tf.constant(get_prob_weights(sequences, EMPTY, shape=probs.shape, dtype=probs.dtype.as_numpy_dtype))
         prob_weights_masked = prob_weights[targets_mask]
         # Euclidean Distance Loss
         diff = probs[targets_mask] - targets[targets_mask]

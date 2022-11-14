@@ -593,6 +593,7 @@ train_step_signature_noneg = [
 def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type,
           opt_steps=None,
           multiplier=1.0,
+          meritocratic_beta=1.0,
           token_num=1,
           monitor_probs=False,
           filter_pn=False,
@@ -627,8 +628,10 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                 pos_loss = loss
                 neg_loss = loss
             else:
-                pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
-                neg_loss, neg_probs, neg_sequence_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type)
+                pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type,
+                                                                        meritocratic_beta=meritocratic_beta)
+                neg_loss, neg_probs, neg_sequence_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type,
+                                                                        meritocratic_beta=meritocratic_beta)
                 loss = pos_loss + neg_weight * neg_loss
 
         gradients = tape.gradient(loss, transformer.trainable_variables)
@@ -667,8 +670,8 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                                                                                                               explicit_targets=None, 
                                                                                                               explicit_target_mask=None)
                         # Logging
-                        if (epoch+1) % 20 == 0:
-                            print(f"Epoch {epoch} \n Sequences: \n {pos_tar_real} \n Targets: \n {custom_targets[nonslack_mask]}")
+                        # if (epoch+1) % 20 == 0:
+                            # print(f"Epoch {epoch} \n Sequences: \n {pos_tar_real} \n Targets: \n {custom_targets[nonslack_mask]}")
                         if (epoch) % 10 == 0:
                             ratios = []
                             pos_seq_probs = tf.squeeze((pos_sequence_probs)).numpy()
@@ -684,7 +687,8 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                                                                                     explicit_target_mask=nonslack_mask)
                     loss = pos_loss
                 else:
-                  pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type)
+                  pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type,
+                                                                          meritocratic_beta=meritocratic_beta)
                   loss = pos_loss
 
             gradients = tape.gradient(loss, transformer.trainable_variables)
@@ -700,7 +704,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         
         return pos_predictions
 
-    if not monitor_probs:
+    if not monitor_probs and loss_type != "seq_prp":
         train_step = tf.function(train_step, input_signature=train_step_signature)
         train_step_noneg = tf.function(train_step_noneg, input_signature=train_step_signature_noneg)
 

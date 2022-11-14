@@ -71,6 +71,38 @@ def LogOneMinusSumExp(logp, mask):
 
     return log_n, grad
 
+# 1/k * sum(log(p))
+def democracy_loss(logprobs, mask_nonzero, ispositive):
+    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    loss = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
+    if not ispositive:
+        loss *= -1.0
+    return loss
+
+# meritocratic loss
+@tf.custom_gradient
+def meritocratic_loss(logprobs, mask_nonzero, ispositive, beta):
+
+    datapoint_logprobs = LogSumExp(logprobs, -1, mask_nonzero) #(bs * support)
+    datapoint_logprobs = tf.reduce_sum(datapoint_logprobs, axis=-1) # (bs, )
+    if ispositive:
+        loss = - datapoint_logprobs
+    else:
+        datapoint_logprobs2 = tf.maximum(logEPS, datapoint_logprobs)
+        loss = datapoint_logprobs2
+
+    def grad(upstream):
+        probs = mask_nonzero * tf.math.exp(logprobs)
+        q_mml = probs / (EPS + tf.reduce_sum(probs, axis=-1, keepdims=True))
+        q_beta = mask_nonzero * q_mml ** beta
+        q_beta = q_beta / tf.reduce_sum(q_beta, axis=-1, keepdims=True)
+        g = q_beta * logprobs
+        return upstream * g, tf.constant(0.0), tf.constant(0.0), tf.constant(0.0)
+                                                        
+    return loss, grad
+
+
+
 
 # log probability ratio preserving (prp) loss
 # log probs is (bs * support_size)
@@ -118,7 +150,7 @@ def get_sequence_logprobs(real, pred):
     return sequence_logprobs, mask_nonzero_sequence
 
 
-def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None):
+def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None, meritocratic_beta=1.0):
     sequence_logprobs, mask_nonzero_sequence = get_sequence_logprobs(real, pred)
     
     sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
@@ -202,7 +234,11 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
         # Categorical Cross Entropy Loss
         # weighted_CE = tf.multiply(tf.multiply(prob_weights_masked, targets[targets_mask]), tf.nn.log_softmax(probs)[targets_mask])
         # loss = (-1)*weighted_CE
-    else:
+    elif loss_type=="democracy": # 1/k * sum(log(p))
+        loss = democracy_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
+    elif loss_type=="meritocracy": 
+        loss = meritocratic_loss(sequence_logprobs, mask_nonzero_sequence, ispositive, meritocratic_beta)
+    else:        
         assert False, "Unknown loss type" + loss_type
 
     probs = tf.reduce_mean(datapoint_probs)

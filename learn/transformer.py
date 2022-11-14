@@ -705,7 +705,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         
         return pos_predictions
 
-    if not monitor_probs:
+    if not monitor_probs and loss_type != "seq_prp":
         train_step = tf.function(train_step, input_signature=train_step_signature)
         train_step_noneg = tf.function(train_step_noneg, input_signature=train_step_signature_noneg)
 

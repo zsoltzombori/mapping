@@ -201,26 +201,20 @@ def get_prob_dict(sequences, probs, empty):
     return prob_dict, max_seq_len
 
 
-# TODO: test weighting schemes for conditional probabilities, given the sequence prob tree
-# def get_prob_weights(sequences, token_num, empty):
-#     weights = []
-#     for s_idx, s in enumerate(sequences):
-#         seq_len = len(s)
-#         for i in range(seq_len):
-#             next_token = s[i]
-#             # prefix = list(s)[:i]
-#             if next_token==empty:
-#                 weights.append(1.0)
-#             else:
-#                 weights.append(1.0)
-#     return weights
-
-
-def get_prob_weights(sequences, token_num, empty, shape, dtype):
+def get_prob_weights(sequences, empty, shape, dtype):
+    # sequences shape (support * bs * seq)
+    # weights shape (support * bs * seq * tokens)
     weights = np.zeros(shape, dtype=dtype)
+    # Fix b and s the batch (this is the item in the batch) and seq (this is the position) dimensions: for all s in the support, if token == to token init, do weight += 1.0
     for index, token in np.ndenumerate(sequences):
+        support = sequences[:,index[1],index[2]]
         if token!=empty:
-            weights[index] += 1.0
+            for s,token_s in enumerate(support):
+                if token_s==token:
+                    weights[s,index[1],index[2],token] += 1.0
+
+    weights = np.reciprocal(weights, where= weights!=0.0)
+    weights[weights<EPS] = 0
     return weights
 
 

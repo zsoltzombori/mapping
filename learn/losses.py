@@ -212,7 +212,9 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
                 # Get target updates: 
                 sequences_b = tf.get_static_value(tf.squeeze(real[:,b,:]))
                 probabilities_b = tf.get_static_value(tf.squeeze(probs[:,b,:,:]))
-                targets_b = seq_prp_targets(sequences_b, probabilities_b, TOKENS, ALPHA)
+                # print("Sequences (first batch)", sequences_b)
+                # print("Probs (first batch)", probabilities_b)
+                targets_b = seq_prp_targets(sequences_b, probabilities_b, TOKENS, ALPHA, verbose=(b==0))
                 target_list.append(targets_b)
 
             targets = tf.transpose(tf.stack(target_list), perm=[1,0,2,3])
@@ -223,6 +225,8 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
             targets = explicit_targets
             targets_mask = explicit_target_mask
 
+        # assert False, "Finish with first batch."
+
         # Calculate probability weights: how much each prob should affect the loss
         sequences = tf.get_static_value(real)
         prob_weights = tf.constant(get_prob_weights(sequences, EMPTY, shape=probs.shape, dtype=probs.dtype.as_numpy_dtype))
@@ -231,6 +235,7 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
         diff = probs[targets_mask] - targets[targets_mask]
         weighted_diff = tf.multiply(prob_weights_masked, diff)
         loss = tf.nn.l2_loss(weighted_diff)
+        # print("Loss (before optimization):", loss)
         # Categorical Cross Entropy Loss
         # weighted_CE = tf.multiply(tf.multiply(prob_weights_masked, targets[targets_mask]), tf.nn.log_softmax(probs)[targets_mask])
         # loss = (-1)*weighted_CE

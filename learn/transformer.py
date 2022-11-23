@@ -593,6 +593,7 @@ train_step_signature_noneg = [
 def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, loss_type,
           opt_steps=None,
           multiplier=1.0,
+          multiplier_decay_steps=1000,
           meritocratic_beta=1.0,
           token_num=1,
           monitor_probs=False,
@@ -649,7 +650,7 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         
         return pos_predictions
 
-    def train_step_noneg(inp, pos_tar, opt_steps=1):
+    def train_step_noneg(inp, pos_tar, opt_steps=1, multiplier=1.0):
         pos_tar = tf.transpose(pos_tar, perm=[1,0,2])
         pos_tar_real = pos_tar[:, :, 1:]
 
@@ -708,6 +709,9 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_step = tf.function(train_step, input_signature=train_step_signature)
         train_step_noneg = tf.function(train_step_noneg, input_signature=train_step_signature_noneg)
 
+    
+    multiplier_schedule = tf.keras.optimizers.schedules.ExponentialDecay(multiplier, decay_steps=multiplier_decay_steps, decay_rate=0.96, staircase=True)
+
     for epoch in range(epochs):
         start = time.time()
         train_loss.reset_states()
@@ -716,10 +720,11 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
         train_pos_probs.reset_states()
         train_neg_probs.reset_states()
 
-        
+        multiplier_epoch = multiplier_schedule(epoch)
+        print(f"Epoch {epoch+1}/{epochs} - SeqPRP Multiplier {multiplier_epoch}")
         if neg_batches is None:
             for (pos_inp, pos_tar) in pos_batches:
-                train_step_noneg(pos_inp, pos_tar, opt_steps=opt_steps)
+                train_step_noneg(pos_inp, pos_tar, opt_steps=opt_steps, multiplier=multiplier_epoch)
         else:
             assert loss_type!="seq_prp", "SeqPRP undefined for negative examples."
             # for ((pos_inp, pos_tar), (neg_inp, neg_tar)) in zip(pos_batches, neg_batches):
@@ -737,8 +742,9 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
             ckpt_save_path = ckpt_manager.save()
             print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
-    if monitor_probs:
-        monitor.plot(filename=outdir + "/probchange.png", k=1, ratios=True)
+    # TODO: see why this does not work for 911/912
+    # if monitor_probs:
+    #     monitor.plot(filename=outdir + "/probchange.png", k=1, ratios=True)
 
 
 def show_loss(epoch=None, batch=None,start=None, prefix=""):

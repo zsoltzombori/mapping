@@ -5,6 +5,7 @@ import copy
 import numpy as np
 
 EPS = 1e-8
+MIN_PROB = 1e-3
 
 def sequence_to_key(sequence, padding=False, empty=0, length=10):
     if padding:
@@ -29,36 +30,40 @@ def build_tree(sequences, prob_dict, empty=0):
     tree = {}
     seq_prob_list = []
     for s in sequences:
-        seq_prob = 1.0
-        for i in range(len(s)+1):
-            if i < len(s):
-                next_token = s[i]
-                prefix = list(s)[:i]
-            else:
-                next_token = empty
-                prefix = list(s)
-            inp = sequence_to_key(prefix, padding=True, empty=empty, length=len(s))
-            if inp not in tree:
-                tree[inp] = {"descendant":0.0, "depths":[]}
-            prob = prob_dict[tuple(inp)][next_token]
-            tree[inp][next_token] = prob
-            seq_prob *= prob
-        for i in range(len(s)+1):
-            if i < len(s):
-                next_token = s[i]
-                prefix = list(s)[:i]
-            else:
-                next_token = empty
-                prefix = list(s)
-            inp = sequence_to_key(prefix, padding=True, empty=empty, length=len(s))
-            dkey = (next_token,"descendant")
-            if dkey not in tree[inp]:
-                tree[inp][dkey] = 0.0
-            tree[inp][dkey]+=seq_prob
-            tree[inp]["descendant"] += seq_prob
-            tree[inp]["depths"].append(len(s) - i) # TODO VERIFY DEPTH
-        # print("Seq: {}, prob: {}".format(s, seq_prob))
-        seq_prob_list.append(seq_prob)
+        # if sequence is empty -> ignore!
+        if s[0] == empty:
+            pass
+        else:
+            seq_prob = 1.0
+            for i in range(len(s)+1):
+                if i < len(s):
+                    next_token = s[i]
+                    prefix = list(s)[:i]
+                else:
+                    next_token = empty
+                    prefix = list(s)
+                inp = sequence_to_key(prefix, padding=True, empty=empty, length=len(s))
+                if inp not in tree:
+                    tree[inp] = {"descendant":0.0, "depths":[]}
+                prob = prob_dict[tuple(inp)][next_token]
+                tree[inp][next_token] = prob
+                seq_prob *= prob
+            for i in range(len(s)+1):
+                if i < len(s):
+                    next_token = s[i]
+                    prefix = list(s)[:i]
+                else:
+                    next_token = empty
+                    prefix = list(s)
+                inp = sequence_to_key(prefix, padding=True, empty=empty, length=len(s))
+                dkey = (next_token,"descendant")
+                if dkey not in tree[inp]:
+                    tree[inp][dkey] = 0.0
+                tree[inp][dkey]+=seq_prob
+                tree[inp]["descendant"] += seq_prob
+                tree[inp]["depths"].append(len(s) - i) # TODO VERIFY DEPTH
+            # print("Seq: {}, prob: {}".format(s, seq_prob))
+            seq_prob_list.append(seq_prob)
 
     ratios = []
     for i in range(len(seq_prob_list)):
@@ -73,6 +78,7 @@ def build_tree(sequences, prob_dict, empty=0):
 def get_target_probs(minimums, leaves, depths, multiplier, probs):    
     minimums = np.array(minimums)
     # print("Minimums", minimums)
+
     leaves = np.array(leaves)
     depths = np.array(depths)
 
@@ -89,6 +95,8 @@ def get_target_probs(minimums, leaves, depths, multiplier, probs):
 
     curr_multiplier = multiplier ** (1/np.maximum(1,depths))
     ideal_nonleaf_targets = (slacks * probs + (1-slacks) * curr_multiplier * probs) * nonleaves
+
+    # print("Ideal nonleaf targets", ideal_nonleaf_targets)
 
     direction = np.maximum(0.0, ideal_nonleaf_targets - nonleaf_targets)
     if np.sum(direction) > 0:
@@ -118,7 +126,9 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, emp
             depth = 0
         else:
             dkey = (next_token, "descendant")
-            minimum = np.minimum(1.0, curr_dict[dkey] * multiplier / (anc_prob + EPS))
+            # Added a universal minimum probability for every edge of the tree. 
+            # Explanation: When initial probabilities are too small, multiplicative updates are inconsequential
+            minimum = np.minimum(1.0, np.maximum(curr_dict[dkey] * multiplier / (anc_prob + EPS), MIN_PROB))
 
             anc2 = anc+[next_token]
             # inp2 = pad_sequence(anc2)
@@ -150,24 +160,27 @@ def build_update_dict(anc, anc_prob, multiplier, tree, prob_dict, token_num, emp
 
 
 
-def seq_prp_targets(sequences, probs, token_num, global_multiplier, empty=0):
+def seq_prp_targets(sequences, probs, token_num, global_multiplier, empty=0, verbose=False):
     prob_dict, seq_len = get_prob_dict(sequences, probs, empty=empty)
     tree = build_tree(sequences, prob_dict)
+
     # print("Tree:")
     # for k in tree.keys():
     #     print(k, " -> ", tree[k])
 
     # print("Prob:")
     # for k in prob_dict.keys():
-    #     print(k, " -> ", jnp.around(prob_dict[k], 2))
+    #     print(k, " -> Max ", np.max(np.around(prob_dict[k], 2)))
 
     init_prob = 1.0
     root = []
     update_dict = build_update_dict(root, init_prob, global_multiplier, tree, prob_dict, token_num, empty, seq_len)
 
-    # print("Targets:")
-    # for k in update_dict.keys():
-    #     print(k, " -> ", np.around(update_dict[k], 2))
+    if verbose:
+        print("Targets:")
+        for k in update_dict.keys():
+            # print(k, " -> ", np.around(update_dict[k], 2))
+            print(k, " -> ", update_dict[k])
 
     # create target matrix
     targets = copy.deepcopy(probs)

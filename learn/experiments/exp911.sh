@@ -5,13 +5,13 @@
 #           monitor_probs = 1 !!
 
 exp=911
-epochs=20
+epochs=100
 batch_size=10
 neg_weight=0.0
 num_layers=4
 d_model=128
-lr=0.01
-lr_decay_steps=30
+lr=0.001
+lr_decay_steps=50
 optimizer=adamax
 beta1=0.3
 beta2=0.9
@@ -20,7 +20,9 @@ loss_type="seq_prp"
 split="0.7,0.15,0.15"
 monitor_probs=1
 opt_steps=10
-alpha=1.05
+alpha=2
+alpha_decay_steps=10
+
 
 # schemas=( cmt_renamed cmt_denormalized cmt_mixed cmt_naive_ci cmt_structured_ci cmt_structured )
 # gpus=( 0 1 2 2 3 3 )
@@ -46,7 +48,9 @@ do
     echo "Schema $schema"
     echo "GPU $GPU"
 
-    CMD="python train.py --datadir $datadir --epochs $epochs --batch_size ${batch_size} --neg_weight ${neg_weight} --num_layers ${num_layers} --d_model ${d_model} --lr ${lr} --lr_decay_steps ${lr_decay_steps}  --checkpoint_path ${checkpoint_dir} --optimizer $optimizer --beta1 $beta1 --beta2 $beta2 --char_tokenizer $CHAR_TOKENIZER --loss_type ${loss_type} --split ${split} --outdir ${outdir} --monitor_probs $monitor_probs --opt_steps $opt_steps --multiplier $alpha"   
+    #   --checkpoint_path ${checkpoint_dir} 
+    
+    CMD="python train.py --datadir $datadir --epochs $epochs --batch_size ${batch_size} --neg_weight ${neg_weight} --num_layers ${num_layers} --d_model ${d_model} --lr ${lr} --lr_decay_steps ${lr_decay_steps} --optimizer $optimizer --beta1 $beta1 --beta2 $beta2 --char_tokenizer $CHAR_TOKENIZER --loss_type ${loss_type} --split ${split} --outdir ${outdir} --monitor_probs $monitor_probs --opt_steps $opt_steps --multiplier $alpha --multiplier_decay_steps $alpha_decay_steps"   
     CMD="nohup $CMD > $outdir/${schema}.cout 2> $outdir/${schema}.cerr &"
     CMD="CUDA_VISIBLE_DEVICES=$GPU $CMD"
     echo $CMD

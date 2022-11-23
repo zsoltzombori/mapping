@@ -50,6 +50,7 @@ parser.add_argument('--seed', type=int, default=100)
 parser.add_argument('--seq_out_len', type=int, default=20)
 parser.add_argument('--opt_steps', type=int, default=1)
 parser.add_argument('--multiplier', type=float, default=1.0)
+parser.add_argument('--multiplier_decay_steps', type=int, default=1000)
 parser.add_argument('--meritocratic_beta', type=float, default=1.0)
 
 
@@ -87,6 +88,7 @@ BETA_1=args.beta1
 BETA_2=args.beta2
 OPT_STEPS=args.opt_steps
 ALPHA=args.multiplier
+ALPHA_DECAY_STEPS = args.multiplier_decay_steps
 MERITOCRATIC_BETA = args.meritocratic_beta
 
 
@@ -207,6 +209,7 @@ else:
 transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, NEG_WEIGHT, LOSS_TYPE, 
                   opt_steps=OPT_STEPS,
                   multiplier=ALPHA,
+                  multiplier_decay_steps=ALPHA_DECAY_STEPS,
                   token_num=TOKENS,
                   meritocratic_beta=MERITOCRATIC_BETA,
                   outdir=OUTDIR,

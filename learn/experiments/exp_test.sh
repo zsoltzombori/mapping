@@ -8,8 +8,8 @@ batch_size=2 # 1
 neg_weight=0.0
 num_layers=1 # 2
 d_model=1024
-lr=0.001
-lr_decay_steps=1000000 # not applied if steps>epochs, TODO: verify
+lr=0.01
+lr_decay_steps=200 # not applied if steps>epochs, TODO: verify
 # optimizer=adamax
 # beta1=0.3
 # beta2=0.9
@@ -22,7 +22,7 @@ split="1,0,0"
 monitor_probs=1
 GPU=0
 opt_steps=20 # 100
-alpha=1.05
+alpha=1.1
 
 echo "Schema $schema"
 echo "GPU $GPU"

@@ -2,7 +2,7 @@ from xmlrpc.server import MultiPathXMLRPCServer
 import tensorflow as tf
 from sequential.utils import seq_prp_targets, get_prob_weights
 
-EPS=1e-20
+EPS=1e-10
 logEPS=tf.math.log(EPS)
 
 @tf.custom_gradient
@@ -76,28 +76,24 @@ def democracy_loss(logprobs, mask_nonzero, ispositive):
     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
     loss = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
     if not ispositive:
-        loss *= -1.0
+        loss = tf.maximum(logEPS, -1.0 * loss)
     return loss
 
 # meritocratic loss
 @tf.custom_gradient
-def meritocratic_loss(logprobs, mask_nonzero, ispositive, beta):
+def meritocratic_loss(logprobs, mask_nonzero, beta):
 
     datapoint_logprobs = LogSumExp(logprobs, -1, mask_nonzero) #(bs * support)
     datapoint_logprobs = tf.reduce_sum(datapoint_logprobs, axis=-1) # (bs, )
-    if ispositive:
-        loss = - datapoint_logprobs
-    else:
-        datapoint_logprobs2 = tf.maximum(logEPS, datapoint_logprobs)
-        loss = datapoint_logprobs2
+    loss = - datapoint_logprobs
 
     def grad(upstream):
         probs = mask_nonzero * tf.math.exp(logprobs)
         q_mml = probs / (EPS + tf.reduce_sum(probs, axis=-1, keepdims=True))
         q_beta = mask_nonzero * q_mml ** beta
-        q_beta = q_beta / tf.reduce_sum(q_beta, axis=-1, keepdims=True)
+        q_beta = q_beta / (EPS + tf.reduce_sum(q_beta, axis=-1, keepdims=True))
         g = q_beta * logprobs
-        return upstream * g, tf.constant(0.0), tf.constant(0.0), tf.constant(0.0)
+        return tf.expand_dims(upstream,axis=1) * g, tf.constant(0.0), tf.constant(0.0)
                                                         
     return loss, grad
 
@@ -242,7 +238,10 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
     elif loss_type=="democracy": # 1/k * sum(log(p))
         loss = democracy_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
     elif loss_type=="meritocracy": 
-        loss = meritocratic_loss(sequence_logprobs, mask_nonzero_sequence, ispositive, meritocratic_beta)
+        loss = meritocratic_loss(sequence_logprobs, mask_nonzero_sequence, meritocratic_beta)
+        if not ispositive:
+            loss = tf.maximum(logEPS, - loss)
+
     else:        
         assert False, "Unknown loss type" + loss_type
 

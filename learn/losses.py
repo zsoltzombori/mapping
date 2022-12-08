@@ -241,7 +241,19 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
         loss = meritocratic_loss(sequence_logprobs, mask_nonzero_sequence, meritocratic_beta)
         if not ispositive:
             loss = tf.maximum(logEPS, - loss)
-
+    elif loss_type=="logit": # gradient is -1 for allowed logits and -1 for disallowed logits
+        # get the logits of real sequences
+        logits = tf.gather(pred, real, batch_dims=3) #(support * bs * seq)
+        loss = tf.reduce_sum(pred, axis=(0,2,3)) - 2 * tf.reduce_sum(logits, axis=(0,2))
+        if not ispositive:
+            loss = tf.maximum(logEPS, - loss)
+    elif loss_type=="prp_xent":
+        target_logprobs = sequence_logprobs - tf.expand_dims(datapoint_logprobs, axis=1)
+        target_probs = tf.math.exp(target_logprobs) * mask_nonzero_sequence # (bs * support)
+        target_probs = tf.get_static_value(target_probs)
+        loss = - target_probs * sequence_logprobs
+        if not ispositive:
+            loss = tf.maximum(logEPS, - loss)
     else:        
         assert False, "Unknown loss type" + loss_type
 

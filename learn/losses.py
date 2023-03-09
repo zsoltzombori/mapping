@@ -98,6 +98,23 @@ def meritocratic_loss(logprobs, mask_nonzero, beta):
     return loss, grad
 
 
+# - sum_i(y_i log(p_i)) + k/(n-k) sum_i((1-y_i) log(p_i))
+def prp_all_loss(logprobs, mask_nonzero, ispositive):
+
+    if not ispositive: # positives and negatives are now symmetrical
+        mask_nonzero = 1-mask_nonzero
+    
+    k_allowed = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    k_disallowed = 1.0 * tf.reduce_sum(1-mask_nonzero, axis=-1, keepdims=True)
+    k_disallowed = tf.maximum(1.0, k_disallowed)
+
+    
+    loss_allowed = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1)
+    logprobs_disallowed = tf.maximum(logprobs, logEPS)
+    loss_disallowed = tf.reduce_sum((1-mask_nonzero) * k_allowed / k_disallowed * logprobs_disallowed, axis=-1)
+
+    loss = loss_allowed + loss_disallowed
+    return loss
 
 
 # log probability ratio preserving (prp) loss
@@ -243,17 +260,20 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
             loss = tf.maximum(logEPS, - loss)
     elif loss_type=="logit": # gradient is -1 for allowed logits and -1 for disallowed logits
         # get the logits of real sequences
-        logits = tf.gather(pred, real, batch_dims=3) #(support * bs * seq)
-        loss = tf.reduce_sum(pred, axis=(0,2,3)) - 2 * tf.reduce_sum(logits, axis=(0,2))
+        pred_norm = tf.linalg.normalize(pred, axis=3)
+        logits = tf.gather(pred_norm, real, batch_dims=3) #(support * bs * seq)
+        loss = tf.reduce_sum(pred_norm, axis=(0,2,3)) - 2 * tf.reduce_sum(logits, axis=(0,2))
         if not ispositive:
             loss = tf.maximum(logEPS, - loss)
     elif loss_type=="prp_xent":
         target_logprobs = sequence_logprobs - tf.expand_dims(datapoint_logprobs, axis=1)
         target_probs = tf.math.exp(target_logprobs) * mask_nonzero_sequence # (bs * support)
-        target_probs = tf.get_static_value(target_probs)
+        target_probs = tf.stop_gradient(target_probs)
         loss = - target_probs * sequence_logprobs
         if not ispositive:
             loss = tf.maximum(logEPS, - loss)
+    elif loss_type=="prp_all":
+        loss = prp_all_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
     else:        
         assert False, "Unknown loss type" + loss_type
 

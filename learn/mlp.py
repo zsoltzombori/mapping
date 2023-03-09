@@ -453,6 +453,42 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=False
+
+    elif exp==10: # consistent prp with 3 outputs
+        d = [(0, (0,1)),
+             (0, (0,2)),
+        ]
+        dp = [(0, (1,2))]
+        nd=None
+        num_classes=3
+        LOSS_TYPE="prp"
+        EPOCHS=100
+        PRETRAIN=30
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+
+    elif exp==11: # consistent nll with 3 outputs
+        d = [(0, (0,1)),
+             (0, (0,2)),
+        ]
+        dp = [(0, (1,2))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="nll"
+        EPOCHS=200
+        PRETRAIN=50
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
         
     # elif exp==5:
     #     d=d3
@@ -569,5 +605,5 @@ def run(exp):
         ndata = None
     train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}".format(exp, LOSS_TYPE), ndata=ndata, ratios=ratios)
 
-run(8)
-run(9)
+run(10)
+run(11)

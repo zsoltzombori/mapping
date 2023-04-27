@@ -41,7 +41,7 @@ parser.add_argument('--beta1', type=float, default=0.5)
 parser.add_argument('--beta2', type=float, default=0.999)
 parser.add_argument('--char_tokenizer', type=int, default=0)
 parser.add_argument('--remove_args', type=int, default=0)
-parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lprp", "joint_lprp"
+parser.add_argument('--loss_type', type=str, default="lprp") #"nll", "prp", "lprp", "bi_prp"
 parser.add_argument('--split', type=str, default="0.7,0.15,0.15")
 parser.add_argument('--outdir', type=str)
 parser.add_argument('--monitor_probs', type=int, default=0)
@@ -52,6 +52,7 @@ parser.add_argument('--opt_steps', type=int, default=1)
 parser.add_argument('--multiplier', type=float, default=1.0)
 parser.add_argument('--multiplier_decay_steps', type=int, default=1000)
 parser.add_argument('--meritocratic_beta', type=float, default=1.0)
+parser.add_argument('--logit_decay', type=float, default=0.0)
 
 
 args = parser.parse_args()
@@ -215,7 +216,8 @@ transformer.train(EPOCHS, my_transformer, optimizer, pos_batches, neg_batches, N
                   outdir=OUTDIR,
                   monitor_probs=MONITOR_PROBS,
                   filter_pn=FILTER_PN,
-                  ckpt_manager=ckpt_manager)
+                  ckpt_manager=ckpt_manager,
+                  logit_decay=args.logit_decay)
 
 if EPOCHS > 0:
     my_transformer.summary()

@@ -202,7 +202,7 @@ def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight):
     return loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs)
 
 
-def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ratios, ndata=None):
+def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ratios, ndata=None, keymap={}):
     train_loss = tf.keras.metrics.Mean(name='train_loss')
     train_loss_pos = tf.keras.metrics.Mean(name='train_loss_pos')
     train_loss_neg = tf.keras.metrics.Mean(name='train_loss_neg')
@@ -253,7 +253,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
         if train_probs_pos.result() == 1.0:
             break
         
-    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=ratios, showsum=True)
+    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=ratios, showsum=True, keymap=keymap)
 
 def evaluate(model, data, ndata=None):
 
@@ -279,6 +279,13 @@ def evaluate(model, data, ndata=None):
 
 
 def run(exp):
+
+    ###############
+    # default values
+    keymap = {}
+    repeat = 1
+    ###############
+    
     if exp==1: # figure 1a
         d = [(0, (0,1,2))]
         dp = [(0, (0,))]
@@ -332,9 +339,9 @@ def run(exp):
         d = [(0, (0,1)), (0, (0,2))]
         dp = [(0, (1,2))]
         nd=None
-        num_classes=10
+        num_classes=100
         LOSS_TYPE="nll"
-        EPOCHS = 100
+        EPOCHS = 200
         PRETRAIN=20
         batch_size=2
         lr=0.1
@@ -343,14 +350,17 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=False
-        
+        keymap={0:'A', 1:'B', 2:'C'}
+        repeat=10
+
+
     elif exp==5: # figure 3 right
         d = [(0, (0,1)), (0, (0,2))]
         dp = [(0, (1,2))]
         nd=None
-        num_classes=10
+        num_classes=100
         LOSS_TYPE="prp"
-        EPOCHS=100
+        EPOCHS=200
         PRETRAIN=20
         batch_size=2
         lr=0.1
@@ -359,6 +369,8 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=False
+        keymap={0:'A', 1:'B', 2:'C'}
+        repeat=10
 
     elif exp==6: # figure 4 consistent 1
         d = [(0, (0,1,2,3,4,5,6,7,8,9)),
@@ -476,9 +488,9 @@ def run(exp):
         d = [(0, (0,1)),
              (0, (0,2)),
         ]
-        dp = [(0, (1,2))]
+        dp = [(0, (2,))]
         nd=None
-        num_classes=100
+        num_classes=3
         LOSS_TYPE="nll"
         EPOCHS=200
         PRETRAIN=50
@@ -489,6 +501,81 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=False
+        
+    elif exp==12: # consistent prp with 3 outputs
+        d = [(0, (0,1)),
+             (0, (0,2)),
+        ]
+        dp = [(0, (1,2))]
+        nd=None
+        num_classes=10
+        LOSS_TYPE="prp"
+        EPOCHS=100
+        PRETRAIN=50
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+
+    elif exp==13: # consistent nll with 3 outputs
+        d = [(0, (0,1)),
+             (0, (0,2)),
+        ]
+        dp = [(0, (0,2))]
+        nd=None
+        num_classes=10
+        LOSS_TYPE="nll"
+        EPOCHS=200
+        PRETRAIN=50
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        
+    if exp==14: # figure 3 left
+        # num classes: 100 -> 10
+        d = [(0, (0,1)), (0, (0,2))]
+        dp = [(0, (1,2))]
+        nd=None
+        num_classes=10
+        LOSS_TYPE="nll"
+        EPOCHS = 200
+        PRETRAIN=20
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={0:'A', 1:'B', 2:'C'}
+        repeat=20
+
+
+    elif exp==15: # figure 3 right
+        # num classes: 100 -> 10
+        d = [(0, (0,1)), (0, (0,2))]
+        dp = [(0, (1,2))]
+        nd=None
+        num_classes=10
+        LOSS_TYPE="prp"
+        EPOCHS=200
+        PRETRAIN=20
+        batch_size=2
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={0:'A', 1:'B', 2:'C'}
+        repeat=10
         
     # elif exp==5:
     #     d=d3
@@ -526,84 +613,86 @@ def run(exp):
     #     PRETRAIN=0
     #     LOSS_TYPE="nll"
 
-    elif exp==9:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="loglin"
-        EPOCHS = 300
-        PRETRAIN=20
-        batch_size=1
-        lr=0.003
-        optimizer_type="sgd"
-        network_sizes=(10,10,10,10)
-        softmax=False
-        NEG_WEIGHT=3
-        ratios=True
+    # elif exp==9:
+    #     d = [(0, (0,1,2))]
+    #     dp = [(0, (0,))]
+    #     nd=None
+    #     num_classes=10
+    #     LOSS_TYPE="loglin"
+    #     EPOCHS = 300
+    #     PRETRAIN=20
+    #     batch_size=1
+    #     lr=0.003
+    #     optimizer_type="sgd"
+    #     network_sizes=(10,10,10,10)
+    #     softmax=False
+    #     NEG_WEIGHT=3
+    #     ratios=True
 
-    elif exp==10:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="loglin_up"
-        EPOCHS = 200
-        PRETRAIN=20
-        batch_size=1
-        lr=0.02
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=False
-        NEG_WEIGHT=3
-        ratios=True
+    # elif exp==10:
+    #     d = [(0, (0,1,2))]
+    #     dp = [(0, (0,))]
+    #     nd=None
+    #     num_classes=10
+    #     LOSS_TYPE="loglin_up"
+    #     EPOCHS = 200
+    #     PRETRAIN=20
+    #     batch_size=1
+    #     lr=0.02
+    #     optimizer_type="sgd"
+    #     network_sizes=(10,10)
+    #     softmax=False
+    #     NEG_WEIGHT=3
+    #     ratios=True
         
-    elif exp==11:
-        d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
-        nd=None
-        num_classes=10
-        LOSS_TYPE="loglin_down"
-        EPOCHS = 200
-        PRETRAIN=20
-        batch_size=1
-        lr=0.02
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=False
-        NEG_WEIGHT=3
-        ratios=True
+    # elif exp==11:
+    #     d = [(0, (0,1,2))]
+    #     dp = [(0, (0,))]
+    #     nd=None
+    #     num_classes=10
+    #     LOSS_TYPE="loglin_down"
+    #     EPOCHS = 200
+    #     PRETRAIN=20
+    #     batch_size=1
+    #     lr=0.02
+    #     optimizer_type="sgd"
+    #     network_sizes=(10,10)
+    #     softmax=False
+    #     NEG_WEIGHT=3
+    #     ratios=True
 
-    elif exp==12:
-        datadir="outkbc/train"
-        data, vocab_in, vocab_out = mlp_data.load_data(datadir)
-        d = data["pos"]
-        dp=None
-        nd = data["neg"]
-        num_classes = len(vocab_out)
-        LOSS_TYPE="prp"
-        EPOCHS = 100
-        PRETRAIN=0
-        batch_size = 3
-        lr = 0.1
-        optimizer_type="sgd"
-        network_sizes=(10,10)
-        softmax=True
-        NEG_WEIGHT=0.1
-        ratios=True
+    # elif exp==12:
+    #     datadir="outkbc/train"
+    #     data, vocab_in, vocab_out = mlp_data.load_data(datadir)
+    #     d = data["pos"]
+    #     dp=None
+    #     nd = data["neg"]
+    #     num_classes = len(vocab_out)
+    #     LOSS_TYPE="prp"
+    #     EPOCHS = 100
+    #     PRETRAIN=0
+    #     batch_size = 3
+    #     lr = 0.1
+    #     optimizer_type="sgd"
+    #     network_sizes=(10,10)
+    #     softmax=True
+    #     NEG_WEIGHT=0.1
+    #     ratios=True
 
-    model, optimizer = build_model(num_classes, network_sizes, optimizer_type, lr, softmax=softmax)
-    if PRETRAIN>0:
-        data_pretrain = prepare_data(dp, num_classes)
-        train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "{}_{}_pre".format(exp, LOSS_TYPE), ratios=ratios)
-    data = prepare_data(d, num_classes)
-    print("Positive inputs: {}".format(len(data[0])))
-    if nd is not None:
-        ndata= prepare_data(nd, num_classes)
-        print("Negative inputs: {}".format(len(ndata[0])))
-    else:
-        ndata = None
-    train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}".format(exp, LOSS_TYPE), ndata=ndata, ratios=ratios)
+    for i in range(repeat):
+        model, optimizer = build_model(num_classes, network_sizes, optimizer_type, lr, softmax=softmax)
+        if PRETRAIN>0:
+            data_pretrain = prepare_data(dp, num_classes)
+            train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "pre_{}_{}_{}".format(exp, LOSS_TYPE, i), ratios=ratios, keymap=keymap)
+        data = prepare_data(d, num_classes)
+        print("Positive inputs: {}".format(len(data[0])))
+        if nd is not None:
+            ndata= prepare_data(nd, num_classes)
+            print("Negative inputs: {}".format(len(ndata[0])))
+        else:
+            ndata = None
+        train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}_{}".format(exp, LOSS_TYPE,i), ndata=ndata, ratios=ratios, keymap=keymap)
 
-run(10)
-run(11)
+run(14)
+
+

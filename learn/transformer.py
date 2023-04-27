@@ -599,7 +599,8 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
           monitor_probs=False,
           filter_pn=False,
           outdir=None,
-          ckpt_manager=None):
+          ckpt_manager=None,
+          logit_decay=0.0):
 
     if monitor_probs:
         monitor = MonitorProbs()
@@ -630,9 +631,11 @@ def train(epochs, transformer, optimizer, pos_batches, neg_batches, neg_weight, 
                 neg_loss = loss
             else:
                 pos_loss, pos_probs, pos_sequence_probs = loss_function(pos_tar_real, pos_predictions, True, loss_type,
-                                                                        meritocratic_beta=meritocratic_beta)
+                                                                        meritocratic_beta=meritocratic_beta,
+                                                                        logit_decay = logit_decay)
                 neg_loss, neg_probs, neg_sequence_probs = loss_function(neg_tar_real, neg_predictions, False, loss_type,
-                                                                        meritocratic_beta=meritocratic_beta)
+                                                                        meritocratic_beta=meritocratic_beta,
+                                                                        logit_decay = logit_decay)
                 loss = pos_loss + neg_weight * neg_loss
 
         gradients = tape.gradient(loss, transformer.trainable_variables)

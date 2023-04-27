@@ -89,7 +89,7 @@ class MonitorProbs():
                 self.history[key][outkey][self.counter] =  prob.numpy()
             
 
-    def plot_one(self, plot, key, showsum=True, average=1):
+    def plot_one(self, plot, key, showsum=True, average=1, keymap={}):
         sumprob = {}
         for outkey in self.history[key]:
             prob_hist = self.history[key][outkey]
@@ -105,7 +105,11 @@ class MonitorProbs():
                 probs.append(prob)
             steps = steps[average-1:]
             probs = moving_average(probs, average)
-            plot.plot(steps, probs, label=outkey) # , label=str(self.outkey2tensor[outkey]))
+            if outkey in keymap:
+                label = keymap[outkey]
+            else:
+                label = outkey
+            plot.plot(steps, probs, label=label) # , label=str(self.outkey2tensor[outkey]))
         keys = sorted(list(sumprob.keys()))
         values = [sumprob[k] for k in keys]
         if showsum:
@@ -147,7 +151,7 @@ class MonitorProbs():
                 curves.append((steps, prob_ratios, label))
         return curves    
                 
-    def plot(self, filename, k=1, ratios=False, fontsize=25, showsum=False):
+    def plot(self, filename, k=1, ratios=False, fontsize=25, showsum=False, keymap={}):
         if not self.enabled:
             return
 
@@ -164,7 +168,7 @@ class MonitorProbs():
             ax1.set_xlabel("Update step", fontsize=fontsize)
             ax1.set_ylabel("Probability", fontsize=fontsize)
             ax1.set_ylim([0, 1.2])
-            self.plot_one(ax1, key, showsum=showsum)
+            self.plot_one(ax1, key, showsum=showsum, keymap=keymap)
             ax1.legend(loc="upper right", prop={'size': 13})
             if ratios:
                 ax2 = ax1.twinx()

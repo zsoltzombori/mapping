@@ -5,6 +5,88 @@ from sequential.utils import seq_prp_targets, get_prob_weights
 EPS=1e-10
 logEPS=tf.math.log(EPS)
 
+# log probability ratio preserving (prp) loss
+# log probs is (bs * support_size)
+def log_prp_loss(logprobs, mask_nonzero, ispositive):
+    # loss = (1 - sum probs) / prod(pow(probs, 1/k))
+    # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
+    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    # sumprob = tf.stop_gradient(tf.reduce_sum(tf.math.exp(logprobs), axis=-1, keepdims=False))
+            
+    if ispositive:
+        log_n = LogOneMinusSumExp(logprobs, mask_nonzero)
+        log_d = tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
+        loss = log_n - log_d
+        # loss *= 1.0 - sumprob
+    else:
+        log_n = LogSumExp(logprobs, -1, mask_nonzero)
+        logprobs2 = tf.maximum(logEPS, logprobs)
+        log_d = tf.reduce_sum(mask_nonzero * logprobs2, axis=-1, keepdims=True) / k
+        loss = log_d + log_n
+        loss = tf.maximum(loss, -10000)
+        # loss *= sumprob
+
+    loss = k * loss
+    return loss
+
+# - sum_i(y_i log(p_i)) + k/(n-k) sum_i((1-y_i) log(p_i))
+def biprp_loss(logprobs, mask_nonzero, ispositive):
+
+    if not ispositive: # positives and negatives are now symmetrical
+        mask_nonzero = 1-mask_nonzero
+    
+    k_allowed = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    k_disallowed = 1.0 * tf.reduce_sum(1-mask_nonzero, axis=-1, keepdims=True)
+    k_disallowed = tf.maximum(1.0, k_disallowed)
+    
+    loss_allowed = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1)
+    logprobs_disallowed = tf.maximum(logprobs, logEPS)
+    loss_disallowed = tf.reduce_sum((1-mask_nonzero) * k_allowed / k_disallowed * logprobs_disallowed, axis=-1)
+
+    loss = loss_allowed + loss_disallowed
+
+    return loss
+
+# 1/k * sum(log(p))
+def democracy_loss(logprobs, mask_nonzero, ispositive):
+    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
+    loss = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
+    if not ispositive:
+        loss = tf.maximum(logEPS, -1.0 * loss)
+    return loss
+
+# meritocratic loss
+@tf.custom_gradient
+def meritocratic_loss(logprobs, mask_nonzero, beta):
+
+    datapoint_logprobs = LogSumExp(logprobs, -1, mask_nonzero) #(bs * support)
+    datapoint_logprobs = tf.reduce_sum(datapoint_logprobs, axis=-1) # (bs, )
+    loss = - datapoint_logprobs
+
+    def grad(upstream):
+        probs = mask_nonzero * tf.math.exp(logprobs)
+        q_mml = probs / (EPS + tf.reduce_sum(probs, axis=-1, keepdims=True))
+        q_beta = mask_nonzero * q_mml ** beta
+        q_beta = q_beta / (EPS + tf.reduce_sum(q_beta, axis=-1, keepdims=True))
+        g = q_beta * logprobs
+        return tf.expand_dims(upstream,axis=1) * g, tf.constant(0.0), tf.constant(0.0)
+                                                        
+    return loss, grad
+
+
+def rc_loss(probs, logprobs, ispositive):
+
+    weights = 1/2 * tf.stop_gradient(probs / tf.reduce_sum(probs, axis=-1, keepdims=True))
+    weighted_logprobs = weights * logprobs
+
+    if ispositive:
+        loss = - tf.reduce_sum(weighted_logprobs, axis=-1)
+    else:
+        weighted_logprobs = tf.maximum(weighted_logprobs, logEPS)
+        loss = tf.reduce_sum(weighted_logprobs, axis=-1)
+    return loss
+
+
 @tf.custom_gradient
 def LogSumExp(x, axis, mask):
     x_max = tf.reduce_max(x, axis=axis, keepdims=True)
@@ -71,75 +153,10 @@ def LogOneMinusSumExp(logp, mask):
 
     return log_n, grad
 
-# 1/k * sum(log(p))
-def democracy_loss(logprobs, mask_nonzero, ispositive):
-    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
-    loss = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
-    if not ispositive:
-        loss = tf.maximum(logEPS, -1.0 * loss)
-    return loss
-
-# meritocratic loss
-@tf.custom_gradient
-def meritocratic_loss(logprobs, mask_nonzero, beta):
-
-    datapoint_logprobs = LogSumExp(logprobs, -1, mask_nonzero) #(bs * support)
-    datapoint_logprobs = tf.reduce_sum(datapoint_logprobs, axis=-1) # (bs, )
-    loss = - datapoint_logprobs
-
-    def grad(upstream):
-        probs = mask_nonzero * tf.math.exp(logprobs)
-        q_mml = probs / (EPS + tf.reduce_sum(probs, axis=-1, keepdims=True))
-        q_beta = mask_nonzero * q_mml ** beta
-        q_beta = q_beta / (EPS + tf.reduce_sum(q_beta, axis=-1, keepdims=True))
-        g = q_beta * logprobs
-        return tf.expand_dims(upstream,axis=1) * g, tf.constant(0.0), tf.constant(0.0)
-                                                        
-    return loss, grad
 
 
-# - sum_i(y_i log(p_i)) + k/(n-k) sum_i((1-y_i) log(p_i))
-def prp_all_loss(logprobs, mask_nonzero, ispositive):
-
-    if not ispositive: # positives and negatives are now symmetrical
-        mask_nonzero = 1-mask_nonzero
-    
-    k_allowed = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
-    k_disallowed = 1.0 * tf.reduce_sum(1-mask_nonzero, axis=-1, keepdims=True)
-    k_disallowed = tf.maximum(1.0, k_disallowed)
-
-    
-    loss_allowed = - tf.reduce_sum(mask_nonzero * logprobs, axis=-1)
-    logprobs_disallowed = tf.maximum(logprobs, logEPS)
-    loss_disallowed = tf.reduce_sum((1-mask_nonzero) * k_allowed / k_disallowed * logprobs_disallowed, axis=-1)
-
-    loss = loss_allowed + loss_disallowed
-    return loss
 
 
-# log probability ratio preserving (prp) loss
-# log probs is (bs * support_size)
-def log_prp_loss(logprobs, mask_nonzero, ispositive):
-    # loss = (1 - sum probs) / prod(pow(probs, 1/k))
-    # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
-    k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
-    # sumprob = tf.stop_gradient(tf.reduce_sum(tf.math.exp(logprobs), axis=-1, keepdims=False))
-            
-    if ispositive:
-        log_n = LogOneMinusSumExp(logprobs, mask_nonzero)
-        log_d = tf.reduce_sum(mask_nonzero * logprobs, axis=-1) / k
-        loss = log_n - log_d
-        # loss *= 1.0 - sumprob
-    else:
-        log_n = LogSumExp(logprobs, -1, mask_nonzero)
-        logprobs2 = tf.maximum(logEPS, logprobs)
-        log_d = tf.reduce_sum(mask_nonzero * logprobs2, axis=-1, keepdims=True) / k
-        loss = log_d + log_n
-        loss = tf.maximum(loss, -10000)
-        # loss *= sumprob
-
-    loss = k * loss
-    return loss
 
 def get_sequence_logprobs(real, pred):
     mask_zero = tf.math.equal(real, 0)
@@ -163,7 +180,10 @@ def get_sequence_logprobs(real, pred):
     return sequence_logprobs, mask_nonzero_sequence
 
 
-def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None, meritocratic_beta=1.0):
+def loss_function(real, pred, ispositive, loss_type,
+                  multiplier=1.0, token_num=1, compute_explicit_targets=False, explicit_targets=None, explicit_target_mask=None,
+                  meritocratic_beta=1.0,
+                  logit_decay=0.0):
     sequence_logprobs, mask_nonzero_sequence = get_sequence_logprobs(real, pred)
     
     sequence_probs = tf.math.exp(sequence_logprobs) * mask_nonzero_sequence
@@ -272,13 +292,19 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
         loss = - target_probs * sequence_logprobs
         if not ispositive:
             loss = tf.maximum(logEPS, - loss)
-    elif loss_type=="prp_all":
-        loss = prp_all_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
+    elif loss_type=="bi_prp":
+        loss = biprp_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
+    elif loss_type=="rc":
+        loss = rc_loss(sequence_probs, sequence_logprobs, ispositive)
     else:        
         assert False, "Unknown loss type" + loss_type
 
     probs = tf.reduce_mean(datapoint_probs)
     loss = tf.reduce_mean(loss)
+    
+    # push logits down
+    loss += logit_decay * tf.reduce_mean(tf.square(pred))
+
 
     if loss_type=="seq_prp":
         # Return explicit targets to fit + mask
@@ -287,29 +313,30 @@ def loss_function(real, pred, ispositive, loss_type, multiplier=1.0, token_num=1
         return loss, probs, sequence_probs    
         
 
-def loss_function_joint(real_pos, real_neg, pred_pos, pred_neg):
-    pos_logprobs, pos_mask = get_sequence_logprobs(real_pos, pred_pos)
-    neg_logprobs, neg_mask = get_sequence_logprobs(real_neg, pred_neg)
+# TODO I don't remember what this does
+# def loss_function_joint(real_pos, real_neg, pred_pos, pred_neg):
+#     pos_logprobs, pos_mask = get_sequence_logprobs(real_pos, pred_pos)
+#     neg_logprobs, neg_mask = get_sequence_logprobs(real_neg, pred_neg)
 
-    pos_log_d = tf.reduce_sum(pos_logprobs * pos_mask, axis=-1)
-    neg_log_d = tf.reduce_sum(neg_logprobs * neg_mask, axis=-1)
+#     pos_log_d = tf.reduce_sum(pos_logprobs * pos_mask, axis=-1)
+#     neg_log_d = tf.reduce_sum(neg_logprobs * neg_mask, axis=-1)
 
-    pos_k = 1.0 * tf.reduce_sum(pos_mask, axis=-1, keepdims=True)
-    neg_k = 1.0 * tf.reduce_sum(neg_mask, axis=-1, keepdims=True)
+#     pos_k = 1.0 * tf.reduce_sum(pos_mask, axis=-1, keepdims=True)
+#     neg_k = 1.0 * tf.reduce_sum(neg_mask, axis=-1, keepdims=True)
 
-    logprobs = tf.concat([pos_logprobs, neg_logprobs], axis=-1)
-    mask = tf.concat([pos_mask, neg_mask], axis=-1)
+#     logprobs = tf.concat([pos_logprobs, neg_logprobs], axis=-1)
+#     mask = tf.concat([pos_mask, neg_mask], axis=-1)
 
-    log_n = LogOneMinusSumExp(logprobs, mask)
+#     log_n = LogOneMinusSumExp(logprobs, mask)
 
-    loss = (pos_k - neg_k) * log_n - pos_log_d + neg_log_d
-    loss = tf.reduce_mean(loss)
+#     loss = (pos_k - neg_k) * log_n - pos_log_d + neg_log_d
+#     loss = tf.reduce_mean(loss)
 
-    pos_sequence_probs = tf.math.exp(pos_logprobs) * pos_mask
-    pos_datapoint_probs = tf.reduce_sum(pos_sequence_probs, axis=-1)
-    pos_probs = tf.reduce_mean(pos_datapoint_probs)
-    neg_sequence_probs = tf.math.exp(neg_logprobs) * neg_mask
-    neg_datapoint_probs = tf.reduce_sum(neg_sequence_probs, axis=-1)
-    neg_probs = tf.reduce_mean(neg_datapoint_probs)
+#     pos_sequence_probs = tf.math.exp(pos_logprobs) * pos_mask
+#     pos_datapoint_probs = tf.reduce_sum(pos_sequence_probs, axis=-1)
+#     pos_probs = tf.reduce_mean(pos_datapoint_probs)
+#     neg_sequence_probs = tf.math.exp(neg_logprobs) * neg_mask
+#     neg_datapoint_probs = tf.reduce_sum(neg_sequence_probs, axis=-1)
+#     neg_probs = tf.reduce_mean(neg_datapoint_probs)
 
-    return loss, pos_probs, neg_probs
+#     return loss, pos_probs, neg_probs

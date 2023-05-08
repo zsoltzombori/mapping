@@ -21,7 +21,7 @@ seq_out_len=20
 GPU=4
 
 schemas=( seclen2 seclen4 seclen6 seclen8 seclen10 ) 
-gpus=( 2 3 4 5 6 )
+gpus=( 0 1 2 4 5 )
 
 outdir_base="out/exp${exp}"
 checkpoint_dir_base="checkpoints/exp${exp}"

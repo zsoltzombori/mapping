@@ -74,9 +74,12 @@ def meritocratic_loss(logprobs, mask_nonzero, beta):
     return loss, grad
 
 
-def rc_loss(probs, logprobs, ispositive):
+def rc_loss(logprobs, mask_nonzero, ispositive):
 
-    weights = 1/2 * tf.stop_gradient(probs / tf.reduce_sum(probs, axis=-1, keepdims=True))
+    normalised_logprobs = logprobs - LogSumExp(logprobs, -1, mask_nonzero)
+    weights = 1/2 * tf.math.exp(normalised_logprobs) * mask_nonzero
+    weights = tf.stop_gradient(weights)
+    # weights = 1/2 * tf.stop_gradient(probs / (EPS + tf.reduce_sum(probs, axis=-1, keepdims=True)))
     weighted_logprobs = weights * logprobs
 
     if ispositive:
@@ -295,7 +298,7 @@ def loss_function(real, pred, ispositive, loss_type,
     elif loss_type=="bi_prp":
         loss = biprp_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
     elif loss_type=="rc":
-        loss = rc_loss(sequence_probs, sequence_logprobs, ispositive)
+        loss = rc_loss(sequence_logprobs, mask_nonzero_sequence, ispositive)
     else:        
         assert False, "Unknown loss type" + loss_type
 

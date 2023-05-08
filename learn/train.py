@@ -238,117 +238,122 @@ def print_translation(sentence, pred_tokens, ground_truth, ispositive):
 
 
 def safe_rule(rule, neg_examples):
-  if neg_examples is None:
+    if neg_examples is None:
+        return True
+    for e in neg_examples:
+        candidates = [c.numpy().decode("utf-8") for c in e["output"]]
+        if rule in candidates:
+            return False
     return True
-  for e in neg_examples:
-    candidates = [c.numpy().decode("utf-8") for c in e["output"]]
-    if rule in candidates:
-      return False
-  return True
 
 def eval_beamsearch(translator, pos_e, neg_e, beamsize, max_length, remove_args):
-  t0 = time.time()
-  threshold = 0.5
+    t0 = time.time()
+    threshold = 0.5
 
-  top1_pos = 0
-  top5_pos = 0
-  top10_pos = 0
-  top1_neg = 0
-  top5_neg = 0
-  top10_neg = 0
+    top1_pos = 0
+    top5_pos = 0
+    top10_pos = 0
+    top1_neg = 0
+    top5_neg = 0
+    top10_neg = 0
+    pos_prob_all = 0
+    neg_prob_all = 0
   
-  pos_success = 0
-  neg_failure = 0
-  count = 0
-  for e in pos_e:
-    count += 1
-    sentence = e["input"]
-    if remove_args:
-      sentence = transformer.remove_input_arguments(sentence)
-    translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
-    candidates = [c.numpy().decode("utf-8") for c in e["output"]]
-    candidates = [re.sub(' +', ' ', c) for c in candidates]
+    pos_success = 0
+    neg_failure = 0
+    count = 0
     
-    pos_prob = 0.0
-    neg_prob = 0.0
-    firstrule=None
-    firstprob=0.0
-    t1p, t5p, t10p, t1n, t5n, t10n = 0, 0, 0, 0, 0, 0
-    for i, (prob, text, isvalid, rule) in enumerate(translations):
-      # if not isvalid:
-      #   continue
+    for e in pos_e:
+        count += 1
+        sentence = e["input"]
+        if remove_args:
+            sentence = transformer.remove_input_arguments(sentence)
+        translations = translator.beamsearch(tf.constant(sentence), beamsize=beamsize, max_length=max_length)
+        candidates = [c.numpy().decode("utf-8") for c in e["output"]]
+        candidates = [re.sub(' +', ' ', c) for c in candidates]
+    
+        pos_prob = 0.0
+        neg_prob = 0.0
+        firstrule=None
+        firstprob=0.0
+        t1p, t5p, t10p, t1n, t5n, t10n = 0, 0, 0, 0, 0, 0
 
-      # print("xxx", prob, text)
+        for i, (prob, text, isvalid, rule) in enumerate(translations):
       
-      if firstrule is None:
-        firstrule = text
-        firstprob = prob
+            if firstrule is None:
+                firstrule = text
+                firstprob = prob
         
-      if text in candidates:
-        pos_prob += prob
-        if i == 0:
-          t1p = 1
-        if i < 5:
-          t5p = 1
-        if i < 10:
-          t10p = 1
+            if text in candidates:
+                pos_prob += prob
+                if i == 0:
+                    t1p = 1
+                if i < 5:
+                    t5p = 1
+                if i < 10:
+                    t10p = 1
           
           
-      if not safe_rule(text, neg_e):
-        neg_prob += prob
-        if i == 0:
-          t1n = 1
-        if i < 5:
-          t5n = 1
-        if i < 10:
-          t10n = 1
+            if not safe_rule(text, neg_e):
+                neg_prob += prob
+                if i == 0:
+                    t1n = 1
+                if i < 5:
+                    t5n = 1
+                if i < 10:
+                    t10n = 1
 
-    top1_pos += t1p
-    top5_pos += t5p
-    top10_pos += t10p
-    top1_neg += t1n
-    top5_neg += t5n
-    top10_neg += t10n
+
     
-    failure = False
-    if t1p == 1:
-      pos_success += 1
-    else:
-      failure = True
-    if t1n == 1:
-      neg_failure += 1
-      failure = True
+        top1_pos += t1p
+        top5_pos += t5p
+        top10_pos += t10p
+        top1_neg += t1n
+        top5_neg += t5n
+        top10_neg += t10n
+        pos_prob_all += pos_prob
+        neg_prob_all += neg_prob
+    
+        failure = False
+        if t1p == 1:
+            pos_success += 1
+        else:
+            failure = True
+        if t1n == 1:
+            neg_failure += 1
+            failure = True
 
-    if ((count+1) % 10) == 0:
-      print("\n", count)
-      print("Positive top1: {}, top5: {}, top10: {}".format(top1_pos / count, top5_pos / count, top10_pos / count))
-      print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
+        if ((count+1) % 10) == 0:
+            print("\n", count)
+            print("Positive top1: {}, top5: {}, top10: {}, prob: {}".format(top1_pos / count, top5_pos / count, top10_pos / count, pos_prob_all / count))
+            print("Negative top1: {}, top5: {}, top10: {}, prob: {}".format(top1_neg / count, top5_neg / count, top10_neg / count, neg_prob_all / count))
 
-    print(count)
-    if False: #failure:
-      print("---------FAILURE----------")
-      print(f'{"Input:":15s}: {sentence.numpy()}')
-      for o in e["output"]:
-        print(f'{"   Output:":15s}: {o.numpy()}')
-      print(f'{firstprob} {firstrule}')
-      print(f'Pos prob: {pos_prob:.3f}, Neg prob: {neg_prob:.3f}')
-    sys.stdout.flush()
-
-  t1 = time.time()
-  if count == 0:
-    count = 1
-  print("Evaltime: {:.2f} sec, positive success ratio: {}, negative failure ratio: {}".format(t1-t0, pos_success / count, neg_failure / count))
-  print("Positive top1: {}, top5: {}, top10: {}".format(top1_pos / count, top5_pos / count, top10_pos / count))
-  print("Negative top1: {}, top5: {}, top10: {}".format(top1_neg / count, top5_neg / count, top10_neg / count))
+        print(count)
+        if False: #failure:
+            print("---------FAILURE----------")
+            print(f'{"Input:":15s}: {sentence.numpy()}')
+            for o in e["output"]:
+                print(f'{"   Output:":15s}: {o.numpy()}')
+            print(f'{firstprob} {firstrule}')
+            print(f'Pos prob: {pos_prob:.3f}, Neg prob: {neg_prob:.3f}')
+        sys.stdout.flush()
 
 
-# print("\n\nEVALUATION on the validation set")
-# if neg_examples is not None:
-#   neg_examples_val = neg_examples.concatenate(neg_examples_val)
-# else:
-#   neg_examples_val = None  
-# eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+    t1 = time.time()
+    if count == 0:
+        count = 1
+    print("Evaltime: {:.2f} sec, positive success ratio: {}, negative failure ratio: {}".format(t1-t0, pos_success / count, neg_failure / count))
+    print("Positive top1: {}, top5: {}, top10: {}, prob: {}".format(top1_pos / count, top5_pos / count, top10_pos / count, pos_prob_all / count))
+    print("Negative top1: {}, top5: {}, top10: {}, prob: {}".format(top1_neg / count, top5_neg / count, top10_neg / count, neg_prob_all / count))
 
-print("\n\nEVALUATION on the train set")
-pos_examples = pos_examples.take(500)
-eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+
+print("\n\nEVALUATION on the validation set")
+if neg_examples is not None:
+    neg_examples_val = neg_examples.concatenate(neg_examples_val)
+else:
+    neg_examples_val = None  
+eval_beamsearch(my_translator, pos_examples_val, neg_examples_val, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)
+
+# print("\n\nEVALUATION on the train set")
+# pos_examples = pos_examples.take(500)
+# eval_beamsearch(my_translator, pos_examples, neg_examples, beamsize=BEAMSIZE, max_length=MAX_SEQUENCE_LENGTH_OUT, remove_args=REMOVE_ARGS)

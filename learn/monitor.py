@@ -119,7 +119,7 @@ class MonitorProbs():
 
 
         
-    def get_ratio_curves(self, key, average=1):
+    def get_ratio_curves(self, key, average=1, keymap={}):
         curves = []
         outkeys = list(self.history[key].keys())
         for i, outkey1 in enumerate(outkeys):
@@ -127,12 +127,22 @@ class MonitorProbs():
             for j in range(i+1, len(outkeys)):
                 outkey2 = outkeys[j]
 
+                if outkey1 in keymap:
+                    label1 = keymap[outkey1]
+                else:
+                    label1 = outkey1
+                if outkey2 in keymap:
+                    label2 = keymap[outkey2]
+                else:
+                    label2 = outkey2
+                    
+                
                 if outkey1 < outkey2:
                     exp = 1
-                    label = "{}/{}".format(outkey1, outkey2)
+                    label = "{}/{}".format(label1, label2)
                 else:
                     exp = -1
-                    label = "{}/{}".format(outkey2, outkey1)
+                    label = "{}/{}".format(label2, label1)
                     
                 prob_hist2 = self.history[key][outkey2]
                 steps = []
@@ -167,14 +177,14 @@ class MonitorProbs():
             key = keys[i]
             ax1.set_xlabel("Update step", fontsize=fontsize)
             ax1.set_ylabel("Probability", fontsize=fontsize)
-            ax1.set_ylim([0, 1.2])
+            ax1.set_ylim([0, 1.0])
             self.plot_one(ax1, key, showsum=showsum, keymap=keymap)
             ax1.legend(loc="upper right", prop={'size': 13})
             if ratios:
                 ax2 = ax1.twinx()
                 ax2.set_ylabel("Probability ratio", fontsize=fontsize)
                 ax2.set_ylim([0, 10])
-                curves = self.get_ratio_curves(keys[0])
+                curves = self.get_ratio_curves(keys[0], keymap=keymap)
                 for (steps, prob_ratios, label) in curves:
                     ax2.plot(steps, prob_ratios, label=label, linestyle='dotted')
                 ax2.legend(loc="right", prop={'size': 13})

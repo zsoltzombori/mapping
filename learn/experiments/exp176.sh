@@ -1,8 +1,7 @@
-# parent: exp171
-# loss_type: lprp -> meritocracy
-# meritocratic_beta=0.5
+# parent: exp175
+# loss_type: democracy -> lprp
 
-exp=172
+exp=176
 schema="cmt_renamed"
 basedir="outdata/cmt_renamed"
 epochs=20
@@ -16,16 +15,15 @@ optimizer=adamax
 beta1=0.3
 beta2=0.9
 CHAR_TOKENIZER=0
-loss_type="meritocracy"
+loss_type="lprp"
 split="0.7,0.15,0.15"
 monitor_probs=0
 logit_decay=0
-meritocratic_beta=0.5
+meritocratic_beta=0.75
 GPU=1
 
 schemas=( cmt_naive cmt_renamed cmt_naive_ci cmt_structured cmt_denormalized )
-schemas=( cmt_naive_ci )
-gpus=( 0 )
+gpus=( 2 3 4 5 6 )
 
 outdir_base="out/exp${exp}"
 checkpoint_dir_base="checkpoints/exp${exp}"

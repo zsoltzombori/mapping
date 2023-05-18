@@ -57,10 +57,6 @@ def linear_loss(pred, real, ispositive, which="both"):
     logits_up = real * pred
     logits_down = (1-real) * pred
 
-    probs = tf.nn.softmax(pred) * real
-    sumprobs = tf.reduce_sum(probs, axis=-1)
-    sumprobs = tf.reduce_mean(sumprobs)
-    
     if which == "both":
         loss = tf.reduce_sum(logits_down - logits_up, axis=-1)
     elif which == "up":
@@ -70,27 +66,24 @@ def linear_loss(pred, real, ispositive, which="both"):
 
     if not ispositive:
         loss *= -1
-    return loss, sumprobs, probs
+    return loss
 
 def nll_loss(pred, real, ispositive):
     probs = real * pred
     sumprobs = tf.reduce_sum(probs, axis=-1)
-    sumprobs = tf.reduce_mean(sumprobs)
     if ispositive:
         loss = - tf.math.log(sumprobs)
     else:
         sumprobs2 = tf.maximum(sumprobs, EPS)
         loss = tf.math.log(sumprobs2)
     loss = tf.reduce_mean(loss)
-    return loss, sumprobs, probs
+    return loss
 
 def log_prp_loss(pred, real, ispositive):
     k = tf.cast(tf.reduce_sum(real, axis=-1, keepdims=True), tf.float32)
     probs = real * pred
     # print("probs", probs.numpy())
     logprobs = real * tf.math.log(EPS+pred)
-    sumprobs = tf.reduce_sum(probs, axis=-1)
-    sumprobs = tf.reduce_mean(tf.reduce_sum(probs, axis=-1))
 
     if ispositive:
         invprob = 1.0 - tf.reduce_sum(probs, axis=-1, keepdims=True)
@@ -112,7 +105,39 @@ def log_prp_loss(pred, real, ispositive):
     # print("logd", tf.reduce_mean(log_d))
     loss *= k
     loss = tf.reduce_mean(loss)
-    return loss, sumprobs, probs
+    return loss
+
+def rc_loss(pred, real, ispositive):
+    probs = real * pred
+    logprobs = real * tf.math.log(EPS+pred)
+    normalised_probs = probs / tf.reduce_sum(probs, axis=-1, keepdims=True)
+    weights = 1/2 * tf.stop_gradient(normalised_probs)
+    weighted_logprobs = weights * logprobs
+    if ispositive:
+        loss = - tf.reduce_sum(weighted_logprobs, axis=-1)
+    else:
+        weighted_logprobs = tf.maximum(weighted_logprobs, logEPS)
+        loss = tf.reduce_sum(weighted_logprobs, axis=-1)
+    return loss
+
+# meritocratic loss
+@tf.custom_gradient
+def meritocratic_loss(pred, real, beta):
+    probs = real * pred
+    sumprobs = tf.reduce_sum(probs, axis=-1)
+    loss = - tf.math.log(sumprobs)
+
+    def grad(upstream):
+        q_mml = probs / tf.reduce_sum(probs, axis=-1, keepdims=True)
+        q_beta = real * q_mml ** beta
+        q_beta = q_beta / (EPS + tf.reduce_sum(q_beta, axis=-1, keepdims=True))
+        logprobs = real * tf.math.log(EPS+pred)
+        g = q_beta * logprobs
+        return tf.expand_dims(upstream,axis=1) * g, tf.constant(0.0), tf.constant(0.0)
+        # return upstream * g, tf.constant(0.0), tf.constant(0.0)
+                                                        
+    return loss, grad
+
 
 @tf.custom_gradient
 def log_prp_loss2(pred, real, ispositive):
@@ -166,19 +191,39 @@ def build_model(num_classes,sizes, optimizer_type, lr, softmax=True):
     return model, optimizer
 
 def loss_function(predictions, out, loss_type, ispositive):
+    probs = out * predictions
+    sumprobs = tf.reduce_mean(tf.reduce_sum(probs, axis=-1))
+
     if loss_type == "nll":
-        loss, probs, seq_probs = nll_loss(predictions, out, ispositive)
+        loss = nll_loss(predictions, out, ispositive)
     elif loss_type == "loglin":
-        loss, probs, seq_probs = linear_loss(predictions, out, ispositive, "both")
+        loss = linear_loss(predictions, out, ispositive, "both")
     elif loss_type == "loglin_up":
-        loss, probs, seq_probs = linear_loss(predictions, out, ispositive, "up")
+        loss = linear_loss(predictions, out, ispositive, "up")
     elif loss_type == "loglin_down":
-        loss, probs, seq_probs = linear_loss(predictions, out, ispositive, "down")
-    else:
-        loss, probs, seq_probs = log_prp_loss(predictions, out, ispositive)
-    if loss_type == "prp2":
+        loss = linear_loss(predictions, out, ispositive, "down")
+    elif loss_type == "prp":
+        loss = log_prp_loss(predictions, out, ispositive)
+    elif loss_type == "prp2":
         loss = log_prp_loss2(predictions, out, ispositive)
-    return loss, probs, seq_probs
+    elif loss_type == "rc":
+        loss = rc_loss(predictions, out, ispositive)
+    elif loss_type == "meritocracy0.0":
+        assert ispositive
+        loss = meritocratic_loss(predictions, out, 0.0)
+    elif loss_type == "meritocracy0.25":
+        assert ispositive
+        loss = meritocratic_loss(predictions, out, 0.25)
+    elif loss_type == "meritocracy0.5":
+        assert ispositive
+        loss = meritocratic_loss(predictions, out, 0.5)
+    elif loss_type == "meritocracy0.75":
+        assert ispositive
+        loss = meritocratic_loss(predictions, out, 0.75)
+    elif loss_type == "meritocracy1.0":
+        assert ispositive
+        loss = meritocratic_loss(predictions, out, 1.0)
+    return loss, sumprobs, probs
 
 def update(model, optimizer, inp, out, loss_type):
     with tf.GradientTape() as tape:
@@ -290,9 +335,9 @@ def run(exp):
         d = [(0, (0,1,2))]
         dp = [(0, (0,))]
         nd=None
-        num_classes=10
+        num_classes=100
         LOSS_TYPE="nll"
-        EPOCHS = 200
+        EPOCHS = 100
         PRETRAIN=3
         batch_size=1
         lr=0.1
@@ -301,6 +346,11 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=True
+        keymap={}
+        for i in range(3):
+            keymap[i]="o_{}".format(i)
+        repeat=1
+        
         
     elif exp==2: # figure 1b
         d = [(0, (0,1,2))]
@@ -308,7 +358,7 @@ def run(exp):
         nd=None
         num_classes=10
         LOSS_TYPE="prp"
-        EPOCHS = 200
+        EPOCHS = 100
         PRETRAIN=3
         batch_size=1
         lr=0.1
@@ -317,6 +367,10 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=True
+        keymap={}
+        for i in range(3):
+            keymap[i]="o_{}".format(i)
+        repeat=10
 
     elif exp==3: # figure 1b with zero layers
         d = [(0, (0,1,2))]
@@ -397,6 +451,10 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]="o_{}".format(i)
+        repeat=10
 
     elif exp==7: # figure 4 consistent 2
         d = [(0, (0,1,2,3,4,5,6,7,8,9)),
@@ -423,6 +481,10 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]="o_{}".format(i)
+        repeat=10
         
     elif exp==8: # figure 4 inconsistent prp
         d = [(0, (1,2,3)),
@@ -576,6 +638,186 @@ def run(exp):
         ratios=False
         keymap={0:'A', 1:'B', 2:'C'}
         repeat=10
+
+    elif exp==16: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="rc"
+        EPOCHS=100
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]="o_{}".format(i)
+        repeat=10
+
+    elif exp==17: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="meritocracy0.0"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=10
+
+    elif exp==18: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="meritocracy0.25"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=10
+        
+    elif exp==19: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="meritocracy0.5"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=10
+        
+    elif exp==20: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="meritocracy0.75"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=10
+        
+    elif exp==21: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="meritocracy1.0"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=True
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=10
         
     # elif exp==5:
     #     d=d3
@@ -693,6 +935,8 @@ def run(exp):
             ndata = None
         train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}_{}".format(exp, LOSS_TYPE,i), ndata=ndata, ratios=ratios, keymap=keymap)
 
-run(14)
+
+run(2)
+
 
 

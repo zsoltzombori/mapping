@@ -7,7 +7,7 @@ logEPS=tf.math.log(EPS)
 
 # log probability ratio preserving (prp) loss
 # log probs is (bs * support_size)
-def log_prp_loss(logprobs, mask_nonzero, ispositive):
+def log_prp_loss(logprobs, mask_nonzero, ispositive, use_weighting=True):
     # loss = (1 - sum probs) / prod(pow(probs, 1/k))
     # log loss = log(1-sum(exp(logprobs))) - sum(logprobs)/k
     k = 1.0 * tf.reduce_sum(mask_nonzero, axis=-1, keepdims=True)
@@ -27,6 +27,17 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive):
         # loss *= sumprob
 
     loss = k * loss
+
+    if use_weighting:
+        probs = tf.math.exp(logprobs) * mask_nonzero
+        sumprob = tf.reduce_sum(probs, axis=-1)
+        if ispositive:
+            coefficient = 1 - sumprob
+        else:
+            coefficient = sumprob
+        coefficient = tf.stop_gradient(coefficient)
+        loss = coefficient * loss
+
     return loss
 
 # - sum_i(y_i log(p_i)) + k/(n-k) sum_i((1-y_i) log(p_i))

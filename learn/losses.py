@@ -34,7 +34,7 @@ def log_prp_loss(logprobs, mask_nonzero, ispositive, use_weighting=True):
         if ispositive:
             coefficient = 1 - sumprob
         else:
-            coefficient = sumprob
+            coefficient = tf.maximum(sumprob, 0.01)
         coefficient = tf.stop_gradient(coefficient)
         loss = coefficient * loss
 

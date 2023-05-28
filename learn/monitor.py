@@ -201,13 +201,21 @@ def prp_lnn_vanilla_plot():
     loss_nll = -np.log(probs)
     loss_reg = np.log(1-probs)
     loss = loss_nll + loss_reg
+
+    fig, axis = plt.subplots(1, figsize=(10,10))
     
-    plt.plot(logits, loss_nll, label="nll-loss")
-    plt.plot(logits, loss_reg, label="regularizer term")
-    plt.plot(logits, loss, label="prp-loss")
-    plt.xlabel("Logit of target output", fontsize=25)
-    plt.legend(loc='best', prop={'size': 15})
-    plt.tight_layout()
+    axis.plot(logits, loss_nll, color='b', label=r'Allowed term')
+    axis.plot(logits, loss_reg, color='g', label=r'Disallowed term')
+    axis.plot(logits, loss, color='red', label=r'Libra')
+    axis.set_title(r'Libra loss and its components')
+    axis.title.set_fontsize(40)
+    axis.set_xlabel("Logit of allowed output")
+    axis.set_ylabel("Loss")
+    axis.legend(loc='best', prop={'size': 20})
+    axis.xaxis.label.set_fontsize(40)
+    axis.yaxis.label.set_fontsize(40)
+    axis.grid(color='grey', linestyle='-', linewidth=0.3)
+    fig.tight_layout()
     plt.savefig("prp_vanilla.png")
 
 # prp_lnn_vanilla_plot()

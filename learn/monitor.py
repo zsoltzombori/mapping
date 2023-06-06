@@ -216,6 +216,6 @@ def prp_lnn_vanilla_plot():
     axis.yaxis.label.set_fontsize(40)
     axis.grid(color='grey', linestyle='-', linewidth=0.3)
     fig.tight_layout()
-    plt.savefig("prp_vanilla.png")
+    plt.savefig("prp_vanilla.pdf")
 
 # prp_lnn_vanilla_plot()

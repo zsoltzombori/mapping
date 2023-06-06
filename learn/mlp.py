@@ -360,7 +360,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
         if train_probs_pos.result() == 1.0:
             break
         
-    monitor.plot("probchange_{}.png".format(suffix), k=1, ratios=ratios, showsum=True, keymap=keymap)
+    monitor.plot("probchange_{}.pdf".format(suffix), k=1, ratios=ratios, showsum=True, keymap=keymap)
     pos_ratio, neg_ratio = evaluate(model, data, ndata=ndata)
     return pos_ratio, neg_ratio
 
@@ -517,7 +517,7 @@ def run(exp):
         keymap={}
         for i in range(11):
             keymap[i]=r'$o_{{{}}}$'.format(i)
-        repeat=1000
+        repeat=10
 
     elif exp==7: # figure 4 consistent 2
         d = [(0, (0,1,2,3,4,5,6,7,8,9)),
@@ -547,7 +547,7 @@ def run(exp):
         keymap={}
         for i in range(11):
             keymap[i]=r'$o_{{{}}}$'.format(i)
-        repeat=1000
+        repeat=10
         
     elif exp==8: # figure 4 inconsistent prp
         d = [(0, (1,2,3)),
@@ -1066,8 +1066,10 @@ def run(exp):
     print("EXPERIMENT {}, Pos ratio: {}, Neg ratio: {}".format(exp, pos_ratio_total, neg_ratio_total))
 
 
-run(1) # nll toy example in the intro
+# run(1) # nll toy example in the intro
 # run(2) # prp toy example in the intro
+run(4) # nll two samples: (A,B), (A,C)
+run(5) # prp two samples: (A,B), (A,C)
 # run(6) # prp small consistent
 # run(7) # nll small consistent
 # run(16) # rc small consistent

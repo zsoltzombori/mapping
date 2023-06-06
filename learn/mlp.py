@@ -79,6 +79,8 @@ def nll_loss(pred, real, ispositive):
     loss = tf.reduce_mean(loss)
     return loss
 
+
+
 def log_prp_loss(pred, real, ispositive):
     k = tf.cast(tf.reduce_sum(real, axis=-1, keepdims=True), tf.float32)
     probs = real * pred
@@ -106,6 +108,56 @@ def log_prp_loss(pred, real, ispositive):
     loss *= k
     loss = tf.reduce_mean(loss)
     return loss
+
+def biprp_loss(logits, probs, real, ispositive, logit_decay=0.01):
+    k = tf.cast(tf.reduce_sum(real, axis=-1, keepdims=True), tf.float32)
+    k_neg = tf.cast(tf.reduce_sum(1-real, axis=-1, keepdims=True), tf.float32)
+
+    pos_weight = -1/k
+    neg_weight = 1/k_neg
+
+    logprobs = tf.math.log(EPS+probs)
+    
+    pos_loss = tf.reduce_sum(pos_weight * logprobs * real, axis=-1)
+    neg_loss = tf.reduce_sum(neg_weight * logprobs * (1-real), axis=-1)
+    loss = neg_loss + pos_loss
+    
+    if not ispositive:
+        loss = - loss
+    loss += logit_decay * tf.reduce_sum(tf.square(logits), axis=-1)
+    loss = tf.reduce_mean(loss)
+    return loss
+
+def lws_loss(logits, real, ispositive, beta=1.0, logit_decay=0.0):
+    explogits = tf.math.exp(logits)
+    explogits_neg = tf.math.exp(-logits)
+
+    pos_weight = real * explogits / tf.reduce_sum(real*explogits)
+    neg_weight = (1-real) * explogits / tf.reduce_sum((1-real) * explogits)
+
+    pos_probs = 1/(1+explogits) # sigmoid
+    neg_probs = 1/(1+explogits_neg) # sigmoid
+
+    # print("pos_probs", pos_probs)
+    # print("neg_probs", neg_probs)
+
+
+    pos_loss = tf.reduce_sum(pos_weight * pos_probs * real, axis=-1)
+    neg_loss = tf.reduce_sum(neg_weight * neg_probs * (1-real), axis=-1)
+
+    loss = pos_loss + beta * neg_loss
+
+    # print("=----------")
+    # print("logits", logits)
+    # print("explogits", explogits)
+    # print(loss)
+    
+    if not ispositive:
+        loss = - loss
+    loss += logit_decay * tf.reduce_sum(tf.square(logits), axis=-1)
+    loss = tf.reduce_mean(loss)
+    return loss
+
 
 def rc_loss(pred, real, ispositive):
     probs = real * pred
@@ -179,7 +231,7 @@ def build_model(num_classes,sizes, optimizer_type, lr, softmax=True):
     else:
         model.add(tf.keras.layers.Dense(num_classes, activation='linear'))
     model.compile()
-    # model.summary()
+    model.summary()
 
     if optimizer_type == "adam":
         optimizer = tf.keras.optimizers.Adam(lr)
@@ -190,9 +242,13 @@ def build_model(num_classes,sizes, optimizer_type, lr, softmax=True):
 
     return model, optimizer
 
-def loss_function(predictions, out, loss_type, ispositive):
-    probs = out * predictions
-    sumprobs = tf.reduce_mean(tf.reduce_sum(probs, axis=-1))
+def loss_function(predictions, out, loss_type, softmax, ispositive):
+    if softmax:
+        probs = predictions
+    else:
+        probs = tf.nn.softmax(predictions, axis=-1)
+    probs_allowed = out * probs
+    sumprobs_allowed = tf.reduce_mean(tf.reduce_sum(probs_allowed, axis=-1))
 
     if loss_type == "nll":
         loss = nll_loss(predictions, out, ispositive)
@@ -223,23 +279,29 @@ def loss_function(predictions, out, loss_type, ispositive):
     elif loss_type == "meritocracy1.0":
         assert ispositive
         loss = meritocratic_loss(predictions, out, 1.0)
-    return loss, sumprobs, probs
+    elif loss_type == "biprp":
+        assert softmax == False
+        loss = biprp_loss(predictions, probs, out, ispositive)
+    elif loss_type == "lws":
+        assert softmax == False
+        loss = lws_loss(predictions, out, ispositive)
+    return loss, sumprobs_allowed, probs_allowed
 
-def update(model, optimizer, inp, out, loss_type):
+def update(model, optimizer, inp, out, loss_type, softmax=True):
     with tf.GradientTape() as tape:
         predictions = model(inp)
-        loss, probs, seq_probs = loss_function(predictions, out, loss_type, True)
+        loss, probs, seq_probs = loss_function(predictions, out, loss_type, softmax=softmax, ispositive=True)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
     # print("loss: ", loss.numpy())
     # print("gradient sum: ", [tf.reduce_sum(g).numpy() for g in gradients])
     return loss, (loss, probs, seq_probs), (tf.zeros_like(loss), tf.zeros_like(probs), tf.zeros_like(seq_probs))
 
-def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight):
+def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight, softmax=True):
     with tf.GradientTape() as tape:
         predictions = model(inp)
-        ploss, pprobs, pseq_probs = loss_function(predictions, out, loss_type, True)
-        nloss, nprobs, nseq_probs = loss_function(predictions, nout, loss_type, False)
+        ploss, pprobs, pseq_probs = loss_function(predictions, out, loss_type, softmax=softmax, ispositive=True)
+        nloss, nprobs, nseq_probs = loss_function(predictions, nout, loss_type, softmax=softmax, ispositive=False)
         loss = ploss + neg_weight * nloss
         
     gradients = tape.gradient(loss, model.trainable_variables)
@@ -247,7 +309,7 @@ def update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight):
     return loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs)
 
 
-def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ratios, ndata=None, keymap={}):
+def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suffix, ratios, ndata=None, keymap={}, softmax=True):
     train_loss = tf.keras.metrics.Mean(name='train_loss')
     train_loss_pos = tf.keras.metrics.Mean(name='train_loss_pos')
     train_loss_neg = tf.keras.metrics.Mean(name='train_loss_neg')
@@ -269,7 +331,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
 
         for (inp, out) in batches:
             if ndata is None:
-                loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update(model, optimizer, inp, out, loss_type)
+                loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update(model, optimizer, inp, out, loss_type, softmax=softmax)
                 train_loss(loss)
                 train_loss_pos(ploss)
                 train_probs_pos(pprobs)
@@ -279,7 +341,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
                 for (_, nout) in nbatches:
                     if nout.shape[0] != out.shape[0]:
                         break
-                    loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight)
+                    loss, (ploss, pprobs, pseq_probs), (nloss, nprobs, nseq_probs) = update_neg(model, optimizer, inp, out, nout, loss_type, neg_weight, softmax=softmax)
                     train_loss(loss)
                     train_loss_pos(ploss)
                     train_loss_neg(nloss)
@@ -288,7 +350,7 @@ def train(model, optimizer, data, batch_size, epochs, loss_type, neg_weight, suf
                     monitor.update_mlp(inp, out, pseq_probs)
 
             # print("loss", loss.numpy())
-            # print("probs", probs.numpy())
+            # print("probs", pprobs.numpy())
             # for i, p in zip(inp, seq_probs):
                 # p2 = np.floor(p.numpy() * 1000) / 1000
                 # print(f'   {i} -> {p2}')
@@ -351,17 +413,15 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=True
-        keymap={}
-        for i in range(3):
-            keymap[i]="o_{}".format(i)
-        repeat=1
+        keymap={0:'A', 1:'B', 2:'C'}
+        repeat=10
         
         
     elif exp==2: # figure 1b
         d = [(0, (0,1,2))]
         dp = [(0, (0,))]
         nd=None
-        num_classes=10
+        num_classes=100
         LOSS_TYPE="prp"
         EPOCHS = 100
         PRETRAIN=3
@@ -372,9 +432,7 @@ def run(exp):
         softmax=True
         NEG_WEIGHT=3
         ratios=True
-        keymap={}
-        for i in range(3):
-            keymap[i]="o_{}".format(i)
+        keymap={0:'A', 1:'B', 2:'C'}
         repeat=10
 
     elif exp==3: # figure 1b with zero layers
@@ -824,6 +882,66 @@ def run(exp):
             keymap[i]=r'$o_{{{}}}$'.format(i)
         repeat=1000
         
+    elif exp==22: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="biprp"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=0.1
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=False
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=1000
+        
+    elif exp==23: # figure 4 consistent 2
+        d = [(0, (0,1,2,3,4,5,6,7,8,9)),
+             (0, (0,1,2,3,4,5,6,7,8,10)),
+             (0, (0,1,2,3,4,5,6,7,9,10)),
+             (0, (0,1,2,3,4,5,6,8,9,10)),
+             (0, (0,1,2,3,4,5,7,8,9,10)),
+             (0, (0,1,2,3,4,6,7,8,9,10)),
+             (0, (0,1,2,3,5,6,7,8,9,10)),
+             (0, (0,1,2,4,5,6,7,8,9,10)),
+             (0, (0,1,3,4,5,6,7,8,9,10)),
+             (0, (0,2,3,4,5,6,7,8,9,10)),
+        ]
+        dp = [(0, (1,2,3,4,5,6,7,8,9,10))]
+        nd=None
+        num_classes=100
+        LOSS_TYPE="lws"
+        EPOCHS=200
+        PRETRAIN=30
+        batch_size=5
+        lr=1.0
+        optimizer_type="sgd"
+        network_sizes=(10,10)
+        softmax=False
+        NEG_WEIGHT=3
+        ratios=False
+        keymap={}
+        for i in range(11):
+            keymap[i]=r'$o_{{{}}}$'.format(i)
+        repeat=1000
+        
     # elif exp==5:
     #     d=d3
     #     dp=dp3
@@ -932,7 +1050,7 @@ def run(exp):
         model, optimizer = build_model(num_classes, network_sizes, optimizer_type, lr, softmax=softmax)
         if PRETRAIN>0:
             data_pretrain = prepare_data(dp, num_classes)
-            train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "pre_{}_{}_{}".format(exp, LOSS_TYPE, i), ratios=ratios, keymap=keymap)
+            train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "pre_{}_{}_{}".format(exp, LOSS_TYPE, i), ratios=ratios, keymap=keymap, softmax=softmax)
         data = prepare_data(d, num_classes)
         print("Positive inputs: {}".format(len(data[0])))
         if nd is not None:
@@ -940,7 +1058,7 @@ def run(exp):
             print("Negative inputs: {}".format(len(ndata[0])))
         else:
             ndata = None
-        pos_ratio, neg_ratio = train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}_{}".format(exp, LOSS_TYPE,i), ndata=ndata, ratios=ratios, keymap=keymap)
+        pos_ratio, neg_ratio = train(model, optimizer, data, batch_size, EPOCHS, LOSS_TYPE, NEG_WEIGHT, "{}_{}_{}".format(exp, LOSS_TYPE,i), ndata=ndata, ratios=ratios, keymap=keymap, softmax=softmax)
         pos_ratio_total += pos_ratio
         neg_ratio_total += neg_ratio
     pos_ratio_total /= repeat
@@ -948,14 +1066,16 @@ def run(exp):
     print("EXPERIMENT {}, Pos ratio: {}, Neg ratio: {}".format(exp, pos_ratio_total, neg_ratio_total))
 
 
-run(6) # prp small consistent
-run(7) # nll small consistent
-run(16) # rc small consistent
-run(17) # merit0.0 small consistent
-run(18) # merit0.25 small consistent
-run(19) # merit0.5 small consistent
-run(20) # merit0.75 small consistent
-run(21) # merit1.0 small consistent
-
-
+run(1) # nll toy example in the intro
+# run(2) # prp toy example in the intro
+# run(6) # prp small consistent
+# run(7) # nll small consistent
+# run(16) # rc small consistent
+# run(17) # merit0.0 small consistent
+# run(18) # merit0.25 small consistent
+# run(19) # merit0.5 small consistent
+# run(20) # merit0.75 small consistent
+# run(21) # merit1.0 small consistent
+# run(22) # biprp small consistent
+# run(23) # lws small consistent
 

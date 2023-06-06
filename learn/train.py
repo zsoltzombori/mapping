@@ -104,7 +104,7 @@ DROPOUT_RATE = 0.1
 CHECKPOINT_PATH= args.checkpoint_path
 if CHECKPOINT_PATH.lower() == "none":
   CHECKPOINT_PATH = None
-BUFFER_SIZE = 1000 #200000
+BUFFER_SIZE = 200000
 REMOVE_ARGS = args.remove_args == 1
 
 tf.random.set_seed(args.seed)

@@ -10,18 +10,32 @@ To run an experiment, it suffices to run the corresponding script, e.g.
 
 The configuration files specify the location of the dataset in the `basedir` parameter. All the datasets used in our final experiments are provided in the `data_compressed` folder. Note that the datasets have to be unpacked before running an experiment. Alternatively, you can regenerate the datasets, as described in the **Extraction** module in [../extract/README.md](../extract/README.md).
 
-### Commands to run CMT experiments (Section 5.1, Table 1):
+### Commands to run CMT experiments (Section 6.4, Table 3):
 
-- prp-loss: `bash experiments/exp91.sh`
-- nll-loss: `bash experiments/exp129.sh`
+[//]: # (- prp-loss: `bash experiments/exp91.sh`)
+[//]: # (- nll-loss: `bash experiments/exp129.sh`)
 
-### Commands to run NPD experiments (Section 5.2, Table 2):
+- Libra-loss: `bash experiments/exp176.sh`
+- NLL-loss: `bash experiments/exp177.sh`)
+- RC-loss: `bash experiments/exp171.sh`)
+- 0.5-merit-loss: `bash experiments/exp172.sh`)
+- uniform-loss: `bash experiments/exp175.sh`)
 
-- prp-loss, uniform sampling: `bash experiments/exp120.sh`
-- nll-loss, uniform sampling: `bash experiments/exp121.sh`
-- prp-loss, realistic sampling: `bash experiments/exp127.sh`
-- nll-loss, realistic sampling: `bash experiments/exp128.sh`
 
-### Code used to generate Figures 1, 2, 3, 4, 5, 6:
+### Commands to run NPD experiments (Section 6.4, Table 4):
+
+[//]: # (- prp-loss, uniform sampling: `bash experiments/exp120.sh`)
+[//]: # (- nll-loss, uniform sampling: `bash experiments/exp121.sh`)
+[//]: # (- prp-loss, realistic sampling: `bash experiments/exp127.sh`)
+[//]: # (- nll-loss, realistic sampling: `bash experiments/exp128.sh`)
+
+- Libra-loss: `bash experiments/exp188.sh`
+- NLL-loss: `bash experiments/exp189.sh`)
+- RC-loss: `bash experiments/exp190.sh`)
+- 0.5-merit-loss: `bash experiments/exp191.sh`)
+- uniform-loss: `bash experiments/exp192.sh`)
+
+
+### Code used to generate Figures 1, 4, 5, 6:
 
 - `python mlp.py`

@@ -169,6 +169,8 @@ class MonitorProbs():
         k = min(k, len(keys))
 
         fig, axs = plt.subplots(k)
+        plt.xticks(fontsize=17)
+        plt.yticks(fontsize=17)
         if k == 1:
             axs = [axs]
         
@@ -202,19 +204,26 @@ def prp_lnn_vanilla_plot():
     loss_reg = np.log(1-probs)
     loss = loss_nll + loss_reg
 
-    fig, axis = plt.subplots(1, figsize=(10,10))
+    fig, axis = plt.subplots(1, figsize=(7,7))
+    plt.xticks(fontsize=17)
+    plt.yticks(fontsize=17)
     
-    axis.plot(logits, loss_nll, color='b', label=r'Allowed term')
-    axis.plot(logits, loss_reg, color='g', label=r'Disallowed term')
-    axis.plot(logits, loss, color='red', label=r'Libra')
-    axis.set_title(r'Libra loss and its components')
-    axis.title.set_fontsize(40)
-    axis.set_xlabel("Logit of allowed output")
+    axis.plot(logits, loss, color='red', label=r'Libra', linewidth=4)
+    axis.plot(logits, loss_nll, color='b', label=r'Allowed term', linewidth=4)
+    axis.plot(logits, loss_reg, color='g', label=r'Disallowed term', linewidth=4)
+    # axis.set_title(r'Libra loss and its components')
+    # axis.title.set_fontsize(40)
+    axis.set_xlabel(r'Logit of allowed output ($z_{{true}}$)')
     axis.set_ylabel("Loss")
-    axis.legend(loc='best', prop={'size': 20})
-    axis.xaxis.label.set_fontsize(40)
-    axis.yaxis.label.set_fontsize(40)
-    axis.grid(color='grey', linestyle='-', linewidth=0.3)
+    axis.legend(loc='best', prop={'size': 13})
+    axis.xaxis.label.set_fontsize(25)
+    axis.yaxis.label.set_fontsize(25)
+    axis.grid(color='grey', linestyle='-', linewidth=0.1)
+
+    axis.axhline(0, color='black')
+    axis.axvline(0, color='black')
+
+    
     fig.tight_layout()
     plt.savefig("prp_vanilla.pdf")
 

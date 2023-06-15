@@ -400,40 +400,42 @@ def run(exp):
     
     if exp==1: # figure 1a
         d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
+        dp = [(0, (0,)),(0, (0,)), (0,(1,)), (0, (0,1))]
         nd=None
         num_classes=100
         LOSS_TYPE="nll"
-        EPOCHS = 100
-        PRETRAIN=3
+        EPOCHS = 200
+        PRETRAIN=5
         batch_size=1
         lr=0.1
         optimizer_type="sgd"
-        network_sizes=(10,10)
+        # network_sizes=(10,10)
+        network_sizes=(10,)
         softmax=True
         NEG_WEIGHT=3
         ratios=True
         keymap={0:'A', 1:'B', 2:'C'}
-        repeat=10
+        repeat=1
         
         
     elif exp==2: # figure 1b
         d = [(0, (0,1,2))]
-        dp = [(0, (0,))]
+        dp = [(0, (0,)),(0, (0,)), (0,(1,)), (0, (0,1))]
         nd=None
         num_classes=100
         LOSS_TYPE="prp"
-        EPOCHS = 100
-        PRETRAIN=3
+        EPOCHS = 200
+        PRETRAIN=5
         batch_size=1
         lr=0.1
         optimizer_type="sgd"
-        network_sizes=(10,10)
+        # network_sizes=(10,10)
+        network_sizes=(10,)
         softmax=True
         NEG_WEIGHT=3
         ratios=True
         keymap={0:'A', 1:'B', 2:'C'}
-        repeat=10
+        repeat=1
 
     elif exp==3: # figure 1b with zero layers
         d = [(0, (0,1,2))]
@@ -1047,10 +1049,13 @@ def run(exp):
     pos_ratio_total = 0
     neg_ratio_total = 0
     for i in range(repeat):
+        tf.random.set_seed(i)
+        np.random.seed(i)
         model, optimizer = build_model(num_classes, network_sizes, optimizer_type, lr, softmax=softmax)
         if PRETRAIN>0:
+            PRETRAIN_LOSS_TYPE="nll"
             data_pretrain = prepare_data(dp, num_classes)
-            train(model, optimizer, data_pretrain, batch_size, PRETRAIN, LOSS_TYPE, NEG_WEIGHT, "pre_{}_{}_{}".format(exp, LOSS_TYPE, i), ratios=ratios, keymap=keymap, softmax=softmax)
+            train(model, optimizer, data_pretrain, batch_size, PRETRAIN, PRETRAIN_LOSS_TYPE, NEG_WEIGHT, "pre_{}_{}_{}".format(exp, LOSS_TYPE, i), ratios=ratios, keymap=keymap, softmax=softmax)
         data = prepare_data(d, num_classes)
         print("Positive inputs: {}".format(len(data[0])))
         if nd is not None:

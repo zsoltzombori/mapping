@@ -1071,10 +1071,10 @@ def run(exp):
     print("EXPERIMENT {}, Pos ratio: {}, Neg ratio: {}".format(exp, pos_ratio_total, neg_ratio_total))
 
 
-# run(1) # nll toy example in the intro
-# run(2) # prp toy example in the intro
-run(4) # nll two samples: (A,B), (A,C)
-run(5) # prp two samples: (A,B), (A,C)
+run(1) # nll toy example in the intro
+run(2) # prp toy example in the intro
+# run(4) # nll two samples: (A,B), (A,C)
+# run(5) # prp two samples: (A,B), (A,C)
 # run(6) # prp small consistent
 # run(7) # nll small consistent
 # run(16) # rc small consistent

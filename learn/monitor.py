@@ -192,7 +192,7 @@ class MonitorProbs():
                 ax2.legend(loc="right", prop={'size': 13})
             fig.tight_layout()
 
-        plt.savefig(filename)
+        plt.savefig(filename, bbox_inches='tight')
         plt.close()
 
 def prp_lnn_vanilla_plot():
@@ -215,7 +215,7 @@ def prp_lnn_vanilla_plot():
     # axis.title.set_fontsize(40)
     axis.set_xlabel(r'Logit of allowed output ($z_{{true}}$)')
     axis.set_ylabel("Loss")
-    axis.legend(loc='best', prop={'size': 13})
+    axis.legend(loc='best', prop={'size': 20})
     axis.xaxis.label.set_fontsize(25)
     axis.yaxis.label.set_fontsize(25)
     axis.grid(color='grey', linestyle='-', linewidth=0.1)
@@ -225,6 +225,7 @@ def prp_lnn_vanilla_plot():
 
     
     fig.tight_layout()
-    plt.savefig("prp_vanilla.pdf")
+    plt.savefig("prp_vanilla.pdf", bbox_inches='tight')
 
-# prp_lnn_vanilla_plot()
+if __name__ == '__main__':
+    prp_lnn_vanilla_plot()
